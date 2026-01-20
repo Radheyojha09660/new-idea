@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    {% if dashboard %}
+    <header>
+        <h1>Study Portal Admin Dashboard</h1>
+        <p>Manage your video library</p>
+        <button onclick="syncVideos()">Sync Videos</button>
+    </header>
+    <main>
+        <section>
+            <h2>All Videos</h2>
+            {% for video in videos %}
+            <div class="admin-video-item">
+                <h3>{{ video.title }}</h3>
+                <form method="post" action="/admin/update_video">
+                    <input type="hidden" name="video_id" value="{{ video.unique_video_id }}">
+                    <label>Title: <input type="text" name="title" value="{{ video.title }}"></label>
+                    <label>Description: <textarea name="description">{{ video.description }}</textarea></label>
+                    <label>Category: <input type="text" name="category" value="{{ video.category }}"></label>
+                    <button type="submit">Update</button>
+                </form>
+            </div>
+            {% endfor %}
+        </section>
+    </main>
+    {% else %}
+    <main>
+        <section>
+            <h1>Admin Login</h1>
+            <form method="post" action="/admin/login">
+                <label>Password: <input type="password" name="password" required></label>
+                <button type="submit">Login</button>
+            </form>
+        </section>
+    </main>
+    {% endif %}
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Science Test 1</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="test-header">
+        <h1>Science Test 1</h1>
+        <div class="timer">Time: <span id="time">15:00</span></div>
+    </div>
+    <div id="question-container" class="question-container">
+        <!-- Questions will be loaded here -->
+    </div>
+    <div style="text-align: center; padding: 20px;">
+        <button id="next-btn" class="btn">Next</button>
+        <button id="submit-btn" class="btn submit-btn" style="display:none;">Submit Test</button>
+    </div>
+    <div id="results" class="results" style="display:none;">
+        <h2>Test Completed</h2>
+        <p>Your Score: <span id="score"></span> / 10</p>
+        <a href="../index.html">Back to Dashboard</a>
+    </div>
+    <script>
+        const questions = [
+            {
+                question: "What is the chemical formula for water?",
+                options: ["H2O", "CO2", "O2", "NaCl"],
+                answer: 0
+            },
+            {
+                question: "What planet is known as the Red Planet?",
+                options: ["Venus", "Mars", "Jupiter", "Saturn"],
+                answer: 1
+            },
+            {
+                question: "What is the powerhouse of the cell?",
+                options: ["Nucleus", "Mitochondria", "Ribosome", "Endoplasmic Reticulum"],
+                answer: 1
+            },
+            {
+                question: "What gas do plants absorb from the atmosphere?",
+                options: ["Oxygen", "Carbon Dioxide", "Nitrogen", "Hydrogen"],
+                answer: 1
+            },
+            {
+                question: "What is the boiling point of water at sea level?",
+                options: ["90°C", "100°C", "110°C", "120°C"],
+                answer: 1
+            },
+            {
+                question: "What is the largest organ in the human body?",
+                options: ["Heart", "Liver", "Skin", "Brain"],
+                answer: 2
+            },
+            {
+                question: "What force keeps us on the ground?",
+                options: ["Magnetism", "Electricity", "Gravity", "Friction"],
+                answer: 2
+            },
+            {
+                question: "What is the chemical symbol for gold?",
+                options: ["Go", "Gd", "Au", "Ag"],
+                answer: 2
+            },
+            {
+                question: "What type of blood cells fight infections?",
+                options: ["Red blood cells", "White blood cells", "Platelets", "Plasma"],
+                answer: 1
+            },
+            {
+                question: "What is the speed of light?",
+                options: ["300,000 km/s", "150,000 km/s", "450,000 km/s", "600,000 km/s"],
+                answer: 0
+            }
+        ];
+
+        let currentQuestion = 0;
+        let answers = [];
+        let timeLeft = 900; // 15 minutes
+        let timer;
+
+        function startTimer() {
+            timer = setInterval(() => {
+                timeLeft--;
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                document.getElementById('time').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                if (timeLeft <= 0) {
+                    submitTest();
+                }
+            }, 1000);
+        }
+
+        function loadQuestion() {
+            const q = questions[currentQuestion];
+            const container = document.getElementById('question-container');
+            container.innerHTML = `
+                <div class="question">
+                    <h3>Question ${currentQuestion + 1} of 10</h3>
+                    <p>${q.question}</p>
+                    <div class="options">
+                        ${q.options.map((opt, i) => `<label class="option"><input type="radio" name="answer" value="${i}"> ${opt}</label>`).join('')}
+                    </div>
+                </div>
+            `;
+            const nextBtn = document.getElementById('next-btn');
+            if (currentQuestion === questions.length - 1) {
+                nextBtn.style.display = 'none';
+                document.getElementById('submit-btn').style.display = 'inline-block';
+            } else {
+                nextBtn.style.display = 'inline-block';
+                document.getElementById('submit-btn').style.display = 'none';
+            }
+        }
+
+        function nextQuestion() {
+            const selected = document.querySelector('input[name="answer"]:checked');
+            if (selected) {
+                answers[currentQuestion] = parseInt(selected.value);
+            } else {
+                answers[currentQuestion] = -1; // No answer
+            }
+            currentQuestion++;
+            if (currentQuestion < questions.length) {
+                loadQuestion();
+            }
+        }
+
+        function submitTest() {
+            clearInterval(timer);
+            // Save last answer
+            const selected = document.querySelector('input[name="answer"]:checked');
+            if (selected) {
+                answers[currentQuestion] = parseInt(selected.value);
+            } else {
+                answers[currentQuestion] = -1;
+            }
+            // Calculate score
+            let score = 0;
+            questions.forEach((q, i) => {
+                if (answers[i] === q.answer) score++;
+            });
+            // Show results
+            document.getElementById('question-container').style.display = 'none';
+            document.getElementById('next-btn').style.display = 'none';
+            document.getElementById('submit-btn').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('score').textContent = score;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadQuestion();
+            startTimer();
+            document.getElementById('next-btn').addEventListener('click', nextQuestion);
+            document.getElementById('submit-btn').addEventListener('click', submitTest);
+        });
+    </script>
+</body>
+</html>

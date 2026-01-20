@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mathematics Test 1</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="test-header">
+        <h1>Mathematics Test 1</h1>
+        <div class="timer">Time: <span id="time">15:00</span></div>
+    </div>
+    <div id="question-container" class="question-container">
+        <!-- Questions will be loaded here -->
+    </div>
+    <div style="text-align: center; padding: 20px;">
+        <button id="next-btn" class="btn">Next</button>
+        <button id="submit-btn" class="btn submit-btn" style="display:none;">Submit Test</button>
+    </div>
+    <div id="results" class="results" style="display:none;">
+        <h2>Test Completed</h2>
+        <p>Your Score: <span id="score"></span> / 10</p>
+        <a href="../index.html">Back to Dashboard</a>
+    </div>
+    <script>
+        const questions = [
+            {
+                question: "What is 2 + 2?",
+                options: ["3", "4", "5", "6"],
+                answer: 1
+            },
+            {
+                question: "What is 5 * 6?",
+                options: ["30", "35", "25", "40"],
+                answer: 0
+            },
+            {
+                question: "What is the square root of 16?",
+                options: ["2", "4", "6", "8"],
+                answer: 1
+            },
+            {
+                question: "What is 10 / 2?",
+                options: ["3", "4", "5", "6"],
+                answer: 2
+            },
+            {
+                question: "What is 7 + 3?",
+                options: ["9", "10", "11", "12"],
+                answer: 1
+            },
+            {
+                question: "What is 9 * 9?",
+                options: ["81", "72", "90", "99"],
+                answer: 0
+            },
+            {
+                question: "What is 15 - 7?",
+                options: ["6", "7", "8", "9"],
+                answer: 2
+            },
+            {
+                question: "What is 4^2?",
+                options: ["8", "12", "16", "20"],
+                answer: 2
+            },
+            {
+                question: "What is 20 / 4?",
+                options: ["4", "5", "6", "7"],
+                answer: 1
+            },
+            {
+                question: "What is 3 + 5 * 2?",
+                options: ["13", "16", "11", "8"],
+                answer: 0
+            }
+        ];
+
+        let currentQuestion = 0;
+        let answers = [];
+        let timeLeft = 900; // 15 minutes
+        let timer;
+
+        function startTimer() {
+            timer = setInterval(() => {
+                timeLeft--;
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                document.getElementById('time').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                if (timeLeft <= 0) {
+                    submitTest();
+                }
+            }, 1000);
+        }
+
+        function loadQuestion() {
+            const q = questions[currentQuestion];
+            const container = document.getElementById('question-container');
+            container.innerHTML = `
+                <div class="question">
+                    <h3>Question ${currentQuestion + 1} of 10</h3>
+                    <p>${q.question}</p>
+                    <div class="options">
+                        ${q.options.map((opt, i) => `<label class="option"><input type="radio" name="answer" value="${i}"> ${opt}</label>`).join('')}
+                    </div>
+                </div>
+            `;
+            const nextBtn = document.getElementById('next-btn');
+            if (currentQuestion === questions.length - 1) {
+                nextBtn.style.display = 'none';
+                document.getElementById('submit-btn').style.display = 'inline-block';
+            } else {
+                nextBtn.style.display = 'inline-block';
+                document.getElementById('submit-btn').style.display = 'none';
+            }
+        }
+
+        function nextQuestion() {
+            const selected = document.querySelector('input[name="answer"]:checked');
+            if (selected) {
+                answers[currentQuestion] = parseInt(selected.value);
+            } else {
+                answers[currentQuestion] = -1; // No answer
+            }
+            currentQuestion++;
+            if (currentQuestion < questions.length) {
+                loadQuestion();
+            }
+        }
+
+        function submitTest() {
+            clearInterval(timer);
+            // Save last answer
+            const selected = document.querySelector('input[name="answer"]:checked');
+            if (selected) {
+                answers[currentQuestion] = parseInt(selected.value);
+            } else {
+                answers[currentQuestion] = -1;
+            }
+            // Calculate score
+            let score = 0;
+            questions.forEach((q, i) => {
+                if (answers[i] === q.answer) score++;
+            });
+            // Show results
+            document.getElementById('question-container').style.display = 'none';
+            document.getElementById('next-btn').style.display = 'none';
+            document.getElementById('submit-btn').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('score').textContent = score;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadQuestion();
+            startTimer();
+            document.getElementById('next-btn').addEventListener('click', nextQuestion);
+            document.getElementById('submit-btn').addEventListener('click', submitTest);
+        });
+    </script>
+</body>
+</html>

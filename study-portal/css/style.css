@@ -1,0 +1,170 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f8f9fa;
+    color: #333;
+    line-height: 1.6;
+}
+
+header {
+    background-color: #ffffff;
+    text-align: center;
+    padding: 40px 20px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+header h1 {
+    margin: 0;
+    color: #007bff;
+    font-size: 2.5rem;
+}
+
+header p {
+    color: #6c757d;
+    font-size: 1.1rem;
+}
+
+.test-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 20px;
+}
+
+.test-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    padding: 30px;
+    margin: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    width: 300px;
+    text-align: center;
+    transition: transform 0.2s;
+}
+
+.test-card:hover {
+    transform: translateY(-5px);
+}
+
+.test-card h2 {
+    color: #495057;
+    margin-top: 0;
+}
+
+.test-card p {
+    margin: 10px 0;
+    color: #6c757d;
+}
+
+.start-btn {
+    display: inline-block;
+    background-color: #28a745;
+    color: white;
+    padding: 12px 24px;
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.start-btn:hover {
+    background-color: #218838;
+}
+
+/* Test page styles */
+.test-header {
+    background: white;
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.timer {
+    font-size: 1.2rem;
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.question-container {
+    background: white;
+    margin: 20px;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.question {
+    font-size: 1.1rem;
+    margin-bottom: 15px;
+}
+
+.options {
+    margin: 10px 0;
+}
+
+.option {
+    display: block;
+    margin: 5px 0;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.option:hover {
+    background: #f8f9fa;
+}
+
+.btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    margin: 5px;
+}
+
+.btn:hover {
+    background: #0056b3;
+}
+
+.submit-btn {
+    background: #28a745;
+}
+
+.submit-btn:hover {
+    background: #218838;
+}
+
+.results {
+    text-align: center;
+    margin: 20px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+@media (max-width: 600px) {
+    .test-card {
+        width: 100%;
+        margin: 10px 0;
+    }
+    header h1 {
+        font-size: 2rem;
+    }
+    .test-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    .question-container {
+        margin: 10px;
+        padding: 15px;
+    }
+}
