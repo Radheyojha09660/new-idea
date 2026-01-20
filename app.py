@@ -20,7 +20,12 @@ except ImportError:
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
+# Only mount videos directory if it exists
+import os
+if os.path.exists("videos"):
+    app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
 templates = Jinja2Templates(directory="templates")
 
 VIDEO_DB = "video_db.json"
