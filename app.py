@@ -1047,6 +1047,26 @@ async def process_video(url: str, folder_name: str, username: str = None):
         duration = 0
         thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
 
+        # Download video in low quality for fast playback
+        video_filename = f"{video_id}.mp4"
+        video_path = os.path.join(folder_path, video_filename)
+        try:
+            ydl_opts = {
+                'format': 'worst[height<=480]',  # Low quality
+                'outtmpl': video_path,
+                'quiet': True,
+                'no_warnings': True,
+                'socket_timeout': 60,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get('title', title)
+                duration = info.get('duration', 0)
+        except Exception as e:
+            print(f"Failed to download video {video_id}: {e}")
+            # Fallback to embed
+            video_path = None
+
         # Download thumbnail
         thumbnail_path = os.path.join("static", "thumbnails", f"{video_id}.jpg")
         os.makedirs(os.path.dirname(thumbnail_path), exist_ok=True)
@@ -1059,19 +1079,27 @@ async def process_video(url: str, folder_name: str, username: str = None):
                 f.write(b'')  # Empty file
 
         # Save to db
+        if video_path and os.path.exists(video_path):
+            source_url = f"/videos/{username}/{folder_name}/{video_filename}" if username else f"/videos/{folder_name}/{video_filename}"
+            embed_url = f"/watch/{video_id}"
+        else:
+            source_url = url
+            embed_url = f"https://www.youtube.com/embed/{video_id}"
+
         db[video_id] = {
             'video_id': video_id,
             'user_id': username,  # Associate with user
             'title': title,
-            'source_url': url,
+            'source_url': source_url,
             'folder_path': folder_name,  # Changed from folder_name to folder_path
             'folder_name': folder_name.split('/')[-1],  # Keep for backward compatibility
             'embed_url': embed_url,
             'thumbnail_path': thumbnail_path,
             'duration': duration,
-            'file_size': 0,  # Not downloaded
+            'file_size': os.path.getsize(video_path) if video_path and os.path.exists(video_path) else 0,
             'added_time': datetime.now().isoformat(),
-            'views_count': 0
+            'views_count': 0,
+            'source_type': 'youtube_download' if video_path else 'youtube'
         }
         save_db(db)
         print(f"Video added: {title}")
