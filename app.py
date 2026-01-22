@@ -1,3 +1,17 @@
+# Fallback: Show Telegram videos from cache if sync fails
+@app.get("/telegram-videos", response_class=HTMLResponse)
+async def telegram_videos_page(request: Request):
+    try:
+        with open("video_cache.json", "r") as f:
+            videos = list(json.load(f).values())
+    except Exception:
+        videos = []
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "folder_hierarchy": {},
+        "videos": videos,
+        "current_user": None
+    })
 # Move Telegram video to another folder/category
 from fastapi import Body
 
