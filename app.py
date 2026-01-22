@@ -603,11 +603,12 @@ async def fetch_and_store_telegram_videos(channel: str):
         for video in videos:
             unique_id = video.get('unique_video_id')
             if unique_id and unique_id not in db:
-                # Convert Telegram video to database format
+                # Use file_id for streaming
+                file_id = video.get('file_id') or video.get('stream_url') or ''
                 db[unique_id] = {
                     'video_id': unique_id,
                     'title': video.get('title', 'Telegram Video'),
-                    'source_url': f"/api/telegram/download/{unique_id}",
+                    'source_url': f"/api/telegram/stream/{file_id}",
                     'folder_name': f"📱 {video.get('channel_name', 'Telegram')}",
                     'embed_url': f"/watch/{unique_id}",
                     'thumbnail_path': video.get('thumbnail_path', ''),
@@ -616,7 +617,7 @@ async def fetch_and_store_telegram_videos(channel: str):
                     'added_time': datetime.now().isoformat(),
                     'views_count': 0,
                     'source_type': 'telegram',
-                    'file_id': video.get('file_id', ''),
+                    'file_id': file_id,
                     'message_id': video.get('message_id'),
                     'channel_id': video.get('channel_id')
                 }
