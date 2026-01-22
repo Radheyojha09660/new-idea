@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <!-- Notification Toast -->
+    <div id="toast" style="position: fixed; top: 30px; right: 30px; z-index: 9999; min-width: 220px; display: none; padding: 1rem 1.5rem; border-radius: 8px; font-weight: 600; font-size: 1rem; box-shadow: 0 4px 16px rgba(0,0,0,0.08);"></div>
     <!-- Header -->
     <header>
         <a href="/" class="logo">
@@ -15,7 +17,64 @@
             <span>VideoHub</span>
         </a>
         <div class="search-bar">
-            <input type="text" id="searchInput" placeholder="Search videos...">
+            <input type="text" id="searchInput" placeholder="Search videos, folders, channels...">
+            <select id="sortSelect" style="margin-left: 1rem; padding: 0.5rem; border-radius: 4px; border: 1px solid #ccc;">
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+                <option value="views">Most Viewed</option>
+                <option value="az">A-Z</option>
+                <option value="za">Z-A</option>
+            </select>
+            <script>
+            // Enhanced search and sort for video grid
+            document.addEventListener('DOMContentLoaded', function() {
+                const searchInput = document.getElementById('searchInput');
+                const sortSelect = document.getElementById('sortSelect');
+                const grid = document.getElementById('allVideosGrid');
+                if (!grid) return;
+                function filterVideos() {
+                    const query = searchInput.value.toLowerCase();
+                    const cards = grid.querySelectorAll('.video-card');
+                    cards.forEach(card => {
+                        const title = card.querySelector('.video-title').textContent.toLowerCase();
+                        const folder = card.querySelector('.video-meta span:last-child').textContent.toLowerCase();
+                        if (title.includes(query) || folder.includes(query)) {
+                            card.style.display = '';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                }
+                function sortVideos() {
+                    const cards = Array.from(grid.querySelectorAll('.video-card'));
+                    let sorted;
+                    switch (sortSelect.value) {
+                        case 'oldest':
+                            sorted = cards.sort((a, b) => new Date(a.dataset.added) - new Date(b.dataset.added));
+                            break;
+                        case 'views':
+                            sorted = cards.sort((a, b) => parseInt(b.dataset.views) - parseInt(a.dataset.views));
+                            break;
+                        case 'az':
+                            sorted = cards.sort((a, b) => a.querySelector('.video-title').textContent.localeCompare(b.querySelector('.video-title').textContent));
+                            break;
+                        case 'za':
+                            sorted = cards.sort((a, b) => b.querySelector('.video-title').textContent.localeCompare(a.querySelector('.video-title').textContent));
+                            break;
+                        default:
+                            sorted = cards.sort((a, b) => new Date(b.dataset.added) - new Date(a.dataset.added));
+                    }
+                    sorted.forEach(card => grid.appendChild(card));
+                }
+                searchInput.addEventListener('input', filterVideos);
+                sortSelect.addEventListener('change', sortVideos);
+                // Add data attributes for sorting
+                grid.querySelectorAll('.video-card').forEach(card => {
+                    card.dataset.added = card.querySelector('.video-meta').getAttribute('data-added') || '';
+                    card.dataset.views = card.querySelector('.video-views').textContent.replace(/\D/g, '') || '0';
+                });
+            });
+            </script>
         </div>
         <div class="header-actions">
             {% if current_user %}
@@ -142,7 +201,7 @@
                                 </div>
                                 <div class="video-info">
                                     <div class="video-title">{{ video.title }}</div>
-                                    <div class="video-meta">
+                                    <div class="video-meta" data-added="{{ video.added_time }}" data-folder="{{ video.folder_name }}">
                                         <span class="video-views">
                                             <i class="fas fa-eye"></i>
                                             {{ video.views_count }} views
@@ -451,10 +510,22 @@
             closeSettingsModal();
         }
 
+
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 3500) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.style.display = 'block';
+            toast.style.background = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#0088cc';
+            toast.style.color = 'white';
+            toast.style.border = type === 'error' ? '2px solid #b71c1c' : 'none';
+            setTimeout(() => { toast.style.display = 'none'; }, duration);
+        }
+
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
                 fetch('/logout', { method: 'POST' })
-                    .then(() => window.location.href = '/login')
+                    .then(() => { showToast('Logged out!', 'success'); setTimeout(() => window.location.href = '/login', 1000); })
                     .catch(() => window.location.href = '/login');
             }
         }
@@ -462,6 +533,9 @@
         function openAdminPanel() {
             window.location.href = '/admin';
         }
+
+        // Example usage: showToast('Welcome!', 'success');
+        // Replace alert() with showToast() in your JS for better UX.
     </script>
 </body>
 </html>

@@ -1,3 +1,36 @@
+# Move Telegram video to another folder/category
+from fastapi import Body
+
+@app.post("/api/telegram/move_video")
+async def move_telegram_video(
+    video_id: str = Form(...),
+    new_folder: str = Form(...),
+    auth_token: str = Cookie(None)
+):
+    """Move a Telegram video to another folder/category."""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    db = load_db()
+    video = db.get(video_id)
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    # Only allow moving Telegram videos
+    if video.get('source_type') != 'telegram':
+        raise HTTPException(status_code=400, detail="Only Telegram videos can be moved with this endpoint")
+    # Update folder/category
+    video['folder_name'] = new_folder
+    video['folder_path'] = new_folder
+    save_db(db)
+    return {"message": f"Video moved to {new_folder}"}
 from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks, File, UploadFile, Response, Cookie
 from fastapi.responses import StreamingResponse
 from starlette.responses import RedirectResponse
@@ -214,36 +247,33 @@ def build_user_folder_hierarchy(username):
 
     return hierarchy
 
+
+# Homepage route (public landing page)
+@app.get("/welcome", response_class=HTMLResponse)
+async def homepage(request: Request):
+    return templates.TemplateResponse("homepage.html", {"request": request})
+
+# Main app route (redirects to homepage if not logged in)
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request, auth_token: str = Cookie(None)):
-    # Check if user is authenticated
     if not auth_token:
-        return RedirectResponse("/login", status_code=302)
-
+        return RedirectResponse("/welcome", status_code=302)
     try:
         from auth import verify_token
         username = verify_token(auth_token)
         if not username:
             return RedirectResponse("/login", status_code=302)
-
         from auth import load_users
         users = load_users()
         if username not in users:
             return RedirectResponse("/login", status_code=302)
-
         user = users[username]
     except Exception:
         return RedirectResponse("/login", status_code=302)
-
     db = load_db()
-
-    # Filter videos by current user
     user_videos = [video for video in db.values() if video.get('user_id') == user['username']]
     user_videos.sort(key=lambda x: x.get('added_time', ''), reverse=True)
-
-    # Build user-specific folder hierarchy
     folder_hierarchy = build_user_folder_hierarchy(user['username'])
-
     return templates.TemplateResponse("index.html", {
         "request": request,
         "folder_hierarchy": folder_hierarchy,
