@@ -582,14 +582,18 @@ async def get_telegram_channels():
 @app.get("/api/telegram/sync/{channel}")
 async def sync_telegram_channel(channel: str, background_tasks: BackgroundTasks):
     """Sync videos from a Telegram channel"""
+    import traceback
     if not TELEGRAM_AVAILABLE:
+        print("[ERROR] Telegram client not available")
         raise HTTPException(status_code=400, detail="Telegram client not available")
-    
     try:
         # Queue background task
+        print(f"[INFO] Starting sync for channel: {channel}")
         background_tasks.add_task(fetch_and_store_telegram_videos, channel)
         return {"message": f"Syncing channel: {channel}"}
     except Exception as e:
+        print(f"[ERROR] Exception in sync_telegram_channel: {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/telegram/videos")
@@ -607,13 +611,14 @@ async def get_telegram_videos():
 
 async def fetch_and_store_telegram_videos(channel: str):
     """Background task to fetch and store Telegram videos"""
+    import traceback
     if not TELEGRAM_AVAILABLE:
+        print("[ERROR] Telegram client not available in fetch_and_store_telegram_videos")
         return
-    
     try:
+        print(f"[INFO] Fetching videos from channel: {channel}")
         videos = await fetch_videos_from_channel(channel)
         db = load_db()
-        
         for video in videos:
             unique_id = video.get('unique_video_id')
             if unique_id and unique_id not in db:
@@ -635,11 +640,11 @@ async def fetch_and_store_telegram_videos(channel: str):
                     'message_id': video.get('message_id'),
                     'channel_id': video.get('channel_id')
                 }
-        
         save_db(db)
-        print(f"Synced {len(videos)} videos from {channel}")
+        print(f"[INFO] Synced {len(videos)} videos from {channel}")
     except Exception as e:
-        print(f"Error syncing Telegram channel: {e}")
+        print(f"[ERROR] Exception in fetch_and_store_telegram_videos: {e}")
+        print(traceback.format_exc())
 
 async def process_video(url: str, folder_name: str, username: str = None):
     try:
