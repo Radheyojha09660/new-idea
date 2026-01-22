@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks, File, UploadFile, Response, Cookie
+from fastapi.responses import StreamingResponse
 from starlette.responses import RedirectResponse
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,9 +15,34 @@ from auth import get_current_user, authenticate_user, register_user
 import asyncio
 try:
     from telegram_client import fetch_videos_from_channel
+    from telegram_client import get_client
     TELEGRAM_AVAILABLE = True
 except ImportError:
     TELEGRAM_AVAILABLE = False
+import tempfile
+# --- TELEGRAM VIDEO STREAM ENDPOINT ---
+@app.get("/api/telegram/stream/{file_id}")
+async def stream_telegram_video(file_id: str):
+    """Stream Telegram video by file_id (no download, direct stream)"""
+    if not TELEGRAM_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Telegram client not available")
+    client = await get_client()
+    # Use a temp file for streaming
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        temp_path = tmp.name
+    try:
+        await client.download_media(file_id, file_name=temp_path)
+        def iterfile():
+            with open(temp_path, mode="rb") as file_like:
+                yield from file_like
+        return StreamingResponse(iterfile(), media_type="video/mp4")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Streaming failed: {e}")
+    finally:
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -572,9 +598,26 @@ async def fetch_and_store_telegram_videos(channel: str):
 
 async def process_video(url: str, folder_name: str, username: str = None):
     try:
-        # Extract video_id from URL - YouTube IDs are exactly 11 alphanumeric/dash characters
         import re
-        # Try different URL patterns
+
+        # Check if it's a playlist URL
+        playlist_id = None
+        playlist_patterns = [
+            r'youtube\.com/playlist\?list=([a-zA-Z0-9_-]+)',
+            r'youtube\.com/watch\?.*list=([a-zA-Z0-9_-]+)',
+        ]
+        for pattern in playlist_patterns:
+            match = re.search(pattern, url)
+            if match:
+                playlist_id = match.group(1)
+                break
+
+        if playlist_id:
+            # Process playlist
+            await process_playlist(playlist_id, folder_name, username)
+            return
+
+        # Extract single video_id from URL - YouTube IDs are exactly 11 alphanumeric/dash characters
         patterns = [
             r'youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})',
             r'youtu\.be/([a-zA-Z0-9_-]{11})',
@@ -583,7 +626,7 @@ async def process_video(url: str, folder_name: str, username: str = None):
             r'youtube\.com/watch\?v=([a-zA-Z0-9_-]+)',  # Allow longer IDs as fallback
             r'youtu\.be/([a-zA-Z0-9_-]+)',  # Allow longer IDs as fallback
         ]
-        
+
         video_id = None
         for pattern in patterns:
             match = re.search(pattern, url)
@@ -597,7 +640,7 @@ async def process_video(url: str, folder_name: str, username: str = None):
                 elif len(extracted_id) > 0:
                     video_id = extracted_id
                     break
-        
+
         if not video_id:
             print(f"Invalid YouTube URL: {url}")
             return
@@ -617,6 +660,18 @@ async def process_video(url: str, folder_name: str, username: str = None):
         else:
             folder_path = os.path.join("videos", folder_name)
         os.makedirs(folder_path, exist_ok=True)
+
+        # Save folder to folder_db if it doesn't exist
+        folder_db = load_folder_db()
+        if folder_name not in folder_db:
+            folder_db[folder_name] = {
+                'name': folder_name.split('/')[-1],
+                'path': folder_name,
+                'parent_path': '/'.join(folder_name.split('/')[:-1]) if '/' in folder_name else '',
+                'user_id': username,
+                'created_time': datetime.now().isoformat()
+            }
+            save_folder_db(folder_db)
 
         # Use embed URL for YouTube
         embed_url = f"https://www.youtube.com/embed/{video_id}"
@@ -656,6 +711,99 @@ async def process_video(url: str, folder_name: str, username: str = None):
         print(f"Video added: {title}")
     except Exception as e:
         print(f"Error processing video: {e}")
+
+async def process_playlist(playlist_id: str, folder_name: str, username: str = None):
+    try:
+        # Use yt-dlp to extract playlist info
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,  # Don't download, just get metadata
+            'socket_timeout': 30,
+        }
+
+        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(playlist_url, download=False)
+
+        if 'entries' not in info:
+            print(f"No entries found in playlist {playlist_id}")
+            return
+
+        db = load_db()
+        added_count = 0
+
+        for entry in info['entries']:
+            if not entry:
+                continue
+
+            video_id = entry.get('id')
+            if not video_id or video_id in db:
+                continue  # Skip if already exists
+
+            # Create folder if it doesn't exist
+            if username:
+                folder_path = os.path.join("videos", username, folder_name)
+            else:
+                folder_path = os.path.join("videos", folder_name)
+            os.makedirs(folder_path, exist_ok=True)
+
+            # Save folder to folder_db if it doesn't exist
+            folder_db = load_folder_db()
+            if folder_name not in folder_db:
+                folder_db[folder_name] = {
+                    'name': folder_name.split('/')[-1],
+                    'path': folder_name,
+                    'parent_path': '/'.join(folder_name.split('/')[:-1]) if '/' in folder_name else '',
+                    'user_id': username,
+                    'created_time': datetime.now().isoformat()
+                }
+                save_folder_db(folder_db)
+
+            # Use embed URL for YouTube
+            embed_url = f"https://www.youtube.com/embed/{video_id}"
+
+            # Get title from entry
+            title = entry.get('title', f"YouTube Video {video_id}")
+            duration = entry.get('duration', 0)
+            thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+
+            # Download thumbnail
+            thumbnail_path = os.path.join("static", "thumbnails", f"{video_id}.jpg")
+            os.makedirs(os.path.dirname(thumbnail_path), exist_ok=True)
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(thumbnail_url, thumbnail_path)
+            except:
+                # Create a placeholder
+                with open(thumbnail_path, 'wb') as f:
+                    f.write(b'')  # Empty file
+
+            # Save to db
+            db[video_id] = {
+                'video_id': video_id,
+                'user_id': username,
+                'title': title,
+                'source_url': f"https://www.youtube.com/watch?v={video_id}",
+                'folder_path': folder_name,
+                'folder_name': folder_name.split('/')[-1],
+                'embed_url': embed_url,
+                'thumbnail_path': thumbnail_path,
+                'duration': duration,
+                'file_size': 0,
+                'added_time': datetime.now().isoformat(),
+                'views_count': 0
+            }
+
+            added_count += 1
+            print(f"Added playlist video: {title}")
+
+        save_db(db)
+        print(f"Playlist processing complete. Added {added_count} videos from playlist {playlist_id}")
+
+    except Exception as e:
+        print(f"Error processing playlist {playlist_id}: {e}")
 
 @app.post("/api/delete_folder")
 async def delete_folder(folder_name: str = Form(...), auth_token: str = Cookie(None)):
