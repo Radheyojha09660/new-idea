@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+i <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -6,6 +6,173 @@
     <title>VideoHub - YouTube Style Video Library</title>
     <link rel="stylesheet" href="/static/css/youtube.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google AdSense -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+    <style>
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: var(--secondary-color);
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1;
+            border-radius: 4px;
+            top: 100%;
+            right: 0;
+        }
+        .dropdown-content a {
+            color: var(--text-primary);
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+            border-radius: 4px;
+        }
+        .dropdown-content a:hover {
+            background-color: var(--hover-color);
+        }
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: var(--secondary-color);
+            padding: 0;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .modal-header h3 {
+            margin: 0;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text-primary);
+        }
+        .btn-primary {
+            background: #ff0000;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            width: 100%;
+        }
+        .btn-primary:hover {
+            background: #cc0000;
+        }
+        .video-card {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        }
+        .video-menu-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .video-card:hover .video-menu-btn {
+            opacity: 1;
+        }
+        .video-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+        }
+        .video-menu {
+            position: absolute;
+            top: 40px;
+            right: 8px;
+            background: var(--secondary-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 10;
+            min-width: 120px;
+            display: none;
+        }
+        .video-menu.show {
+            display: block;
+        }
+        .video-menu-item {
+            display: block;
+            padding: 8px 12px;
+            text-decoration: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+        .video-menu-item:hover {
+            background: var(--hover-color);
+        }
+    </style>
 </head>
 <body>
     <!-- Notification Toast -->
@@ -89,9 +256,21 @@
             <span style="color: var(--text-primary); margin-right: 1rem;">
                 Welcome, <strong>{{ current_user.username }}</strong>
             </span>
-            <button class="btn-icon" title="Add Video" onclick="openAddVideoModal()">
-                <i class="fas fa-plus"></i>
+            <button class="btn-icon" title="Settings" onclick="openSettingsModal()">
+                <i class="fas fa-cog"></i>
             </button>
+            <a href="/welcome" class="btn-icon" title="Homepage">
+                <i class="fas fa-home"></i>
+            </a>
+            <div class="dropdown">
+                <button class="btn-icon dropbtn" title="Add">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <div class="dropdown-content">
+                    <a href="#" onclick="openCreateFolderModal()">Create New Folder</a>
+                    <a href="#" onclick="openAddVideoModal()">Add Video</a>
+                </div>
+            </div>
             <button class="btn-icon" title="Logout" onclick="logout()">
                 <i class="fas fa-sign-out-alt"></i>
             </button>
@@ -102,6 +281,19 @@
             {% endif %}
         </div>
     </header>
+
+    <!-- Top Banner Ad -->
+    <div style="text-align: center; padding: 1rem; background: var(--secondary-color); border-bottom: 1px solid var(--border-color);">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+             data-ad-slot="XXXXXXXXXX"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    </div>
 
     <div class="container">
         <!-- Sidebar -->
@@ -128,6 +320,19 @@
             <div class="sidebar-section">
                 <div class="sidebar-title">Your Folders</div>
                 <div id="foldersList"></div>
+            </div>
+
+            <!-- Sidebar Ad -->
+            <div class="sidebar-section">
+                <ins class="adsbygoogle"
+                     style="display:block"
+                     data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+                     data-ad-slot="XXXXXXXXXX"
+                     data-ad-format="auto"
+                     data-full-width-responsive="true"></ins>
+                <script>
+                     (adsbygoogle = window.adsbygoogle || []).push({});
+                </script>
             </div>
 
             <div class="sidebar-section">
@@ -188,6 +393,23 @@
                     </button>
                 </div>
             </section>
+
+            <!-- Telegram Channel Management -->
+            <section style="background: linear-gradient(135deg, rgba(0, 136, 204, 0.1), rgba(0, 136, 204, 0.05)); border: 1px solid rgba(0, 136, 204, 0.3); border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem;">
+                <h3><i class="fab fa-telegram" style="color: #0088cc;"></i> Manage Telegram Channels</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 1rem 0;">Add, remove, and sync your Telegram channels</p>
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                    <input type="text" id="newChannelInput" placeholder="@channel_name (e.g., @Rk_Movie096)" style="flex: 1; padding: 0.75rem; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                    <button onclick="addChannel()" style="background: #0088cc; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                        <i class="fas fa-plus"></i> Add Channel
+                    </button>
+                    <button onclick="syncAllChannels()" style="background: #28a745; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                        <i class="fas fa-sync"></i> Sync All
+                    </button>
+                </div>
+                <div id="channelsList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+            </section>
+
             <section>
                 <h2 class="section-title">
                     <i class="fas fa-video"></i> Latest Videos
@@ -195,23 +417,33 @@
                 <div class="videos-grid" id="allVideosGrid">
                     {% if videos %}
                         {% for video in videos %}
-                            <a href="/watch/{{ video.video_id }}" class="video-card">
-                                <div class="video-thumbnail">
-                                    <img src="{% if 'thumbnails' in video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}https://img.youtube.com/vi/{{ video.video_id }}/hqdefault.jpg{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
-                                </div>
-                                <div class="video-info">
-                                    <div class="video-title">{{ video.title }}</div>
-                                    <div class="video-meta" data-added="{{ video.added_time }}" data-folder="{{ video.folder_name }}">
-                                        <span class="video-views">
-                                            <i class="fas fa-eye"></i>
-                                            {{ video.views_count }} views
-                                        </span>
-                                        <span style="background: rgba(255, 0, 0, 0.2); padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem;">
-                                            {{ video.folder_name }}
-                                        </span>
+                            <div class="video-card" data-video-id="{{ video.video_id }}">
+                                <button class="video-menu-btn" onclick="openVideoMenu(event, '{{ video.video_id }}')">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <a href="/watch/{{ video.video_id }}" class="video-link">
+                                    <div class="video-thumbnail">
+                                        <img src="{% if 'thumbnails' in video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}https://img.youtube.com/vi/{{ video.video_id }}/hqdefault.jpg{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
                                     </div>
+                                    <div class="video-info">
+                                        <div class="video-title">{{ video.title }}</div>
+                                        <div class="video-meta" data-added="{{ video.added_time }}" data-folder="{{ video.folder_name }}">
+                                            <span class="video-views">
+                                                <i class="fas fa-eye"></i>
+                                                {{ video.views_count }} views
+                                            </span>
+                                            <span style="background: rgba(255, 0, 0, 0.2); padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem;">
+                                                {{ video.folder_name }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </a>
+                                <div class="video-menu" id="menu-{{ video.video_id }}">
+                                    <button class="video-menu-item" onclick="copyVideo('{{ video.video_id }}')">Copy</button>
+                                    <button class="video-menu-item" onclick="moveVideo('{{ video.video_id }}')">Move</button>
+                                    <button class="video-menu-item" onclick="renameVideo('{{ video.video_id }}')">Rename</button>
                                 </div>
-                            </a>
+                            </div>
                         {% endfor %}
                     {% else %}
                         <div style="grid-column: 1/-1; text-align: center; padding: 3rem; color: var(--text-secondary);">
@@ -229,14 +461,14 @@
                 </h2>
                 <div class="folders-grid" id="foldersGrid">
                     {% for folder_name, folder_data in folder_hierarchy.items() %}
-                        <a href="/folder/{{ folder }}" class="folder-card">
+                        <a href="/folder/{{ folder_name }}" class="folder-card">
                             <div>
                                 <div class="folder-icon">
                                     <i class="fas fa-folder"></i>
                                 </div>
-                                <h3>{{ folder }}</h3>
+                                <h3>{{ folder_name }}</h3>
                             </div>
-                            <p><i class="fas fa-play-circle"></i> {{ count }} video{{ 's' if count != 1 else '' }}</p>
+                            <p><i class="fas fa-play-circle"></i> {{ folder_data.count }} video{{ 's' if folder_data.count != 1 else '' }}</p>
                         </a>
                     {% endfor %}
                 </div>
@@ -251,14 +483,45 @@
                 <h3>Add New Video</h3>
                 <button class="modal-close" onclick="closeAddVideoModal()">×</button>
             </div>
-            <!-- Modal form will be populated by JavaScript -->
+            <form id="addVideoForm" onsubmit="submitAddVideo(event)">
+                <div class="form-group">
+                    <label for="videoUrl">Video URL</label>
+                    <input type="url" id="videoUrl" placeholder="https://www.youtube.com/watch?v=..." required>
+                </div>
+                <div class="form-group">
+                    <label for="folderSelect">Folder</label>
+                    <select id="folderSelect">
+                        <option value="">Choose or create folder...</option>
+                    </select>
+                    <input type="text" id="newFolderInput" placeholder="Or create new folder" style="margin-top: 0.5rem;">
+                </div>
+                <button type="submit" class="btn-primary">Add Video</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for creating folder -->
+    <div class="modal" id="createFolderModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create New Folder</h3>
+                <button class="modal-close" onclick="closeCreateFolderModal()">×</button>
+            </div>
+            <form id="createFolderForm" onsubmit="submitCreateFolder(event)">
+                <div class="form-group">
+                    <label for="folderName">Folder Name</label>
+                    <input type="text" id="folderName" placeholder="Enter folder name" required>
+                </div>
+                <button type="submit" class="btn-primary">Create Folder</button>
+            </form>
         </div>
     </div>
 
     <script>
-        // Load folders on page load
+        // Load folders and channels on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadFolders();
+            loadChannels();
             setupSearch();
         });
 
@@ -325,6 +588,92 @@
             }
         }
 
+        // Load and display channels
+        async function loadChannels() {
+            try {
+                const response = await fetch('/api/telegram/channels');
+                const data = await response.json();
+                const channels = data.channels || [];
+
+                const channelsList = document.getElementById('channelsList');
+                channelsList.innerHTML = channels.map(channel => `
+                    <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.5rem 0.75rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span>${channel}</span>
+                        <button onclick="removeChannel('${channel}')" style="background: none; border: none; color: #dc3545; cursor: pointer; padding: 0.25rem;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading channels:', error);
+            }
+        }
+
+        async function addChannel() {
+            const channel = document.getElementById('newChannelInput').value.trim();
+            if (!channel) {
+                showToast('Please enter a channel name', 'error');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('channel', channel);
+                const response = await fetch('/api/telegram/add_channel', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Channel added successfully!', 'success');
+                    document.getElementById('newChannelInput').value = '';
+                    loadChannels();
+                } else {
+                    showToast('Error adding channel: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function removeChannel(channel) {
+            if (!confirm(`Remove channel ${channel}?`)) return;
+
+            try {
+                const formData = new FormData();
+                formData.append('channel', channel);
+                const response = await fetch('/api/telegram/remove_channel', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Channel removed successfully!', 'success');
+                    loadChannels();
+                } else {
+                    showToast('Error removing channel: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function syncAllChannels() {
+            try {
+                const response = await fetch('/api/telegram/sync_all', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Syncing all channels...', 'success');
+                } else {
+                    showToast('Error syncing channels: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
         // Handle form submission
         function submitAddVideo(event) {
             event.preventDefault();
@@ -356,14 +705,14 @@
             })
             .then(response => response.json())
             .then(data => {
-                showSuccess('Video added successfully! Processing in background...');
+                showToast('Video added successfully! Processing in background...', 'success');
                 clearForm();
                 setTimeout(loadFolders, 2000);
                 // Reload page after 3 seconds to show new video
                 setTimeout(() => location.reload(), 3000);
             })
             .catch(error => {
-                showError('Error adding video: ' + error);
+                showToast('Error adding video: ' + error, 'error');
             });
         }
 
@@ -377,6 +726,59 @@
 
         function closeAddVideoModal() {
             document.getElementById('addVideoModal').classList.remove('active');
+        }
+
+        function openCreateFolderModal() {
+            document.getElementById('createFolderModal').classList.add('active');
+        }
+
+        function closeCreateFolderModal() {
+            document.getElementById('createFolderModal').classList.remove('active');
+        }
+
+        function submitCreateFolder(event) {
+            event.preventDefault();
+            const folderName = document.getElementById('folderName').value.trim();
+            if (!folderName) {
+                alert('Please enter a folder name');
+                return;
+            }
+            // Assuming create folder at root
+            const formData = new FormData();
+            formData.append('subfolder_name', folderName);
+            formData.append('parent_path', '');  // root
+
+            fetch('/api/create_subfolder', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                showToast('Folder created successfully!', 'success');
+                closeCreateFolderModal();
+                // Add to folders grid immediately
+                const foldersGrid = document.getElementById('foldersGrid');
+                if (foldersGrid) {
+                    const newCard = document.createElement('a');
+                    newCard.href = `/folder/${folderName}`;
+                    newCard.className = 'folder-card';
+                    newCard.innerHTML = `
+                        <div>
+                            <div class="folder-icon">
+                                <i class="fas fa-folder"></i>
+                            </div>
+                            <h3>${folderName}</h3>
+                        </div>
+                        <p><i class="fas fa-play-circle"></i> 0 videos</p>
+                    `;
+                    foldersGrid.appendChild(newCard);
+                }
+                setTimeout(loadFolders, 1000);
+                // No need to reload, as it's added
+            })
+            .catch(error => {
+                showToast('Error creating folder: ' + error, 'error');
+            });
         }
 
         function setupSearch() {
@@ -407,26 +809,27 @@
         async function syncTelegram() {
             const channel = document.getElementById('telegramChannel').value.trim();
             if (!channel) {
-                showError('Please enter a channel name');
+                showToast('Please enter a channel name', 'error');
                 return;
             }
 
             try {
                 const response = await fetch(`/api/telegram/sync/${encodeURIComponent(channel)}`, {
-                    method: 'GET'
+                    method: 'GET',
+                    credentials: 'include' // Send cookies for authentication
                 });
-                
+
                 if (!response.ok) {
                     throw new Error('Failed to sync channel');
                 }
 
                 const data = await response.json();
-                showSuccess('✅ Syncing ' + channel + '... This may take a minute.');
-                
+                showToast('✅ Syncing ' + channel + '... This may take a minute.', 'success');
+
                 // Reload page after 5 seconds
                 setTimeout(() => location.reload(), 5000);
             } catch (error) {
-                showError('Error syncing Telegram: ' + error.message);
+                showToast('Error syncing Telegram: ' + error.message, 'error');
             }
         }
 
@@ -444,7 +847,13 @@
             }
         });
 
-        function openSettingsModal() {
+        document.getElementById('createFolderModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCreateFolderModal();
+            }
+        });
+
+        async function openSettingsModal() {
             const modal = document.getElementById('settingsModal');
             if (!modal) {
                 // Create settings modal
@@ -480,13 +889,18 @@
                     </div>
                 `;
                 document.body.insertAdjacentHTML('beforeend', settingsHTML);
-                
-                // Load saved settings
-                const apiId = localStorage.getItem('apiId') || '';
-                const apiHash = localStorage.getItem('apiHash') || '';
-                document.getElementById('apiIdInput').value = apiId;
-                document.getElementById('apiHashInput').value = apiHash;
             }
+
+            // Load saved settings
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+                document.getElementById('apiIdInput').value = data.api_id || '';
+                document.getElementById('apiHashInput').value = data.api_hash || '';
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+
             document.getElementById('settingsModal').classList.add('active');
         }
 
@@ -495,19 +909,33 @@
             if (modal) modal.classList.remove('active');
         }
 
-        function saveSettings() {
+        async function saveSettings() {
             const apiId = document.getElementById('apiIdInput').value.trim();
             const apiHash = document.getElementById('apiHashInput').value.trim();
 
             if (!apiId || !apiHash) {
-                alert('❌ Please enter both API ID and API Hash');
+                showToast('Please enter both API ID and API Hash', 'error');
                 return;
             }
 
-            localStorage.setItem('apiId', apiId);
-            localStorage.setItem('apiHash', apiHash);
-            alert('✅ Settings saved! You can now sync Telegram videos.');
-            closeSettingsModal();
+            try {
+                const formData = new FormData();
+                formData.append('api_id', apiId);
+                formData.append('api_hash', apiHash);
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Settings saved! You can now sync Telegram videos.', 'success');
+                    closeSettingsModal();
+                } else {
+                    showToast('Error saving settings: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
         }
 
 
@@ -525,13 +953,98 @@
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
                 fetch('/logout', { method: 'POST' })
-                    .then(() => { showToast('Logged out!', 'success'); setTimeout(() => window.location.href = '/login', 1000); })
-                    .catch(() => window.location.href = '/login');
+                    .then(() => { showToast('Logged out!', 'success'); setTimeout(() => window.location.href = '/welcome', 1000); })
+                    .catch(() => window.location.href = '/welcome');
             }
         }
 
         function openAdminPanel() {
             window.location.href = '/admin';
+        }
+
+        function openVideoMenu(event, videoId) {
+            event.stopPropagation();
+            // Close other menus
+            document.querySelectorAll('.video-menu.show').forEach(menu => menu.classList.remove('show'));
+            // Open this menu
+            const menu = document.getElementById('menu-' + videoId);
+            if (menu) {
+                menu.classList.add('show');
+            }
+        }
+
+        // Close menus when clicking outside
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.video-menu.show').forEach(menu => menu.classList.remove('show'));
+        });
+
+        async function copyVideo(videoId) {
+            const newFolder = prompt('Enter folder name for copy:');
+            if (!newFolder) return;
+            try {
+                const formData = new FormData();
+                formData.append('video_id', videoId);
+                formData.append('new_folder_path', newFolder);
+                const response = await fetch('/api/copy_video', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Video copied successfully!', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast('Error copying video: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function moveVideo(videoId) {
+            const newFolder = prompt('Enter new folder name:');
+            if (!newFolder) return;
+            try {
+                const formData = new FormData();
+                formData.append('video_id', videoId);
+                formData.append('new_folder_path', newFolder);
+                const response = await fetch('/api/move_video', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Video moved successfully!', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast('Error moving video: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function renameVideo(videoId) {
+            const newTitle = prompt('Enter new title:');
+            if (!newTitle) return;
+            try {
+                const formData = new FormData();
+                formData.append('video_id', videoId);
+                formData.append('new_title', newTitle);
+                const response = await fetch('/api/rename_video', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Video renamed successfully!', 'success');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    showToast('Error renaming video: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
         }
 
         // Example usage: showToast('Welcome!', 'success');

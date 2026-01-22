@@ -44,6 +44,7 @@ async def fetch_videos_from_channel(channel_id):
                     'title': message.caption or video.file_name or f"Video {message.id}",
                     'description': message.caption,
                     'stream_url': f"/stream/{video.file_id}",
+                    'file_id': video.file_id,
                     'thumbnail_path': thumbnail_path,
                     'file_size': video.file_size,
                     'duration': video.duration,

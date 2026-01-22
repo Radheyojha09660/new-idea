@@ -6,6 +6,8 @@
     <title>Welcome to VideoHub</title>
     <link rel="stylesheet" href="/static/css/youtube.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google AdSense -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -178,7 +180,7 @@
             transition: transform 0.3s ease;
         }
 
-        .feature-card:hover i {
+a        .feature-card:hover i {
             transform: scale(1.2) rotate(5deg);
         }
 
@@ -255,10 +257,23 @@
     <section class="hero">
         <h1><i class="fas fa-play-circle"></i> VideoHub</h1>
         <p class="subtitle">The ultimate YouTube & Telegram video library. Organize, stream, and enjoy videos from anywhere!</p>
-        <a href="/" class="cta-btn">
+        <a href="/login" class="cta-btn">
             <i class="fas fa-rocket"></i> Enter App
         </a>
     </section>
+
+    <!-- Hero Ad -->
+    <div style="text-align: center; padding: 2rem; background: rgba(255,255,255,0.05);">
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-client="ca-pub-XXXXXXXXXXXXXXXX"
+             data-ad-slot="XXXXXXXXXX"
+             data-ad-format="auto"
+             data-full-width-responsive="true"></ins>
+        <script>
+             (adsbygoogle = window.adsbygoogle || []).push({});
+        </script>
+    </div>
 
     <section class="features">
         <div class="feature-card">

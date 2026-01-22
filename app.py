@@ -1,3 +1,108 @@
+# --- SYNC ALL USER TELEGRAM CHANNELS ENDPOINT ---
+@app.post("/api/telegram/sync_all")
+async def sync_all_user_telegram_channels(background_tasks: BackgroundTasks, auth_token: str = Cookie(None)):
+    """Sync all Telegram channels in the logged-in user's list"""
+    if not TELEGRAM_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Telegram client not available")
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from auth import verify_token, load_users
+    username = verify_token(auth_token)
+    users = load_users()
+    if username not in users:
+        raise HTTPException(status_code=401, detail="User not found")
+    user = users[username]
+    channels = user.get("telegram_channels", [])
+    if not channels:
+        return {"message": "No channels to sync."}
+    for channel in channels:
+        background_tasks.add_task(fetch_and_store_telegram_videos, channel, username)
+    return {"message": f"Syncing {len(channels)} channel(s): {', '.join(channels)}"}
+# --- USER TELEGRAM CHANNEL MANAGEMENT ENDPOINTS ---
+from fastapi import status
+
+@app.get("/api/user/telegram_channels")
+async def get_user_telegram_channels(auth_token: str = Cookie(None)):
+    """Get the logged-in user's Telegram channel list"""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from auth import verify_token, load_users, save_users
+    username = verify_token(auth_token)
+    users = load_users()
+    if username not in users:
+        raise HTTPException(status_code=401, detail="User not found")
+    user = users[username]
+    return {"telegram_channels": user.get("telegram_channels", [])}
+
+@app.post("/api/user/telegram_channels/add")
+async def add_user_telegram_channel(channel: str = Form(...), auth_token: str = Cookie(None)):
+    """Add a Telegram channel to the logged-in user's list"""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from auth import verify_token, load_users, save_users
+    username = verify_token(auth_token)
+    users = load_users()
+    if username not in users:
+        raise HTTPException(status_code=401, detail="User not found")
+    user = users[username]
+    channels = user.get("telegram_channels", [])
+    if channel not in channels:
+        channels.append(channel)
+        user["telegram_channels"] = channels
+        users[username] = user
+        save_users(users)
+    return {"telegram_channels": channels}
+
+@app.post("/api/user/telegram_channels/remove")
+async def remove_user_telegram_channel(channel: str = Form(...), auth_token: str = Cookie(None)):
+    """Remove a Telegram channel from the logged-in user's list"""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    from auth import verify_token, load_users, save_users
+    username = verify_token(auth_token)
+    users = load_users()
+    if username not in users:
+        raise HTTPException(status_code=401, detail="User not found")
+    user = users[username]
+    channels = user.get("telegram_channels", [])
+    if channel in channels:
+        channels.remove(channel)
+        user["telegram_channels"] = channels
+        users[username] = user
+        save_users(users)
+    return {"telegram_channels": channels}
+from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks, File, UploadFile, Response, Cookie
+from fastapi.responses import StreamingResponse
+from starlette.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import uvicorn
+import yt_dlp
+import json
+import os
+from datetime import datetime
+import aiofiles
+import shutil
+from auth import get_current_user, authenticate_user, register_user
+import asyncio
+try:
+    from telegram_client import fetch_videos_from_channel
+    from telegram_client import get_client
+    TELEGRAM_AVAILABLE = True
+except ImportError:
+    TELEGRAM_AVAILABLE = False
+import tempfile
+
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Only mount videos directory if it exists
+if os.path.exists("videos"):
+    app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
+templates = Jinja2Templates(directory="templates")
+
 # Fallback: Show Telegram videos from cache if sync fails
 @app.get("/telegram-videos", response_class=HTMLResponse)
 async def telegram_videos_page(request: Request):
@@ -12,6 +117,7 @@ async def telegram_videos_page(request: Request):
         "videos": videos,
         "current_user": None
     })
+
 # Move Telegram video to another folder/category
 from fastapi import Body
 
@@ -45,28 +151,7 @@ async def move_telegram_video(
     video['folder_path'] = new_folder
     save_db(db)
     return {"message": f"Video moved to {new_folder}"}
-from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks, File, UploadFile, Response, Cookie
-from fastapi.responses import StreamingResponse
-from starlette.responses import RedirectResponse
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import uvicorn
-import yt_dlp
-import json
-import os
-from datetime import datetime
-import aiofiles
-import shutil
-from auth import get_current_user, authenticate_user, register_user
-import asyncio
-try:
-    from telegram_client import fetch_videos_from_channel
-    from telegram_client import get_client
-    TELEGRAM_AVAILABLE = True
-except ImportError:
-    TELEGRAM_AVAILABLE = False
-import tempfile
+
 # --- TELEGRAM VIDEO STREAM ENDPOINT ---
 @app.get("/api/telegram/stream/{file_id}")
 async def stream_telegram_video(file_id: str):
@@ -91,18 +176,9 @@ async def stream_telegram_video(file_id: str):
         except Exception:
             pass
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Only mount videos directory if it exists
-import os
-if os.path.exists("videos"):
-    app.mount("/videos", StaticFiles(directory="videos"), name="videos")
-
-templates = Jinja2Templates(directory="templates")
-
 VIDEO_DB = "video_db.json"
 FOLDER_DB = "folder_db.json"
+CONFIG_DB = "config.json"
 
 # Authentication routes
 @app.get("/login", response_class=HTMLResponse)
@@ -163,7 +239,7 @@ async def register(
 
 @app.post("/logout")
 async def logout(response: Response):
-    response = RedirectResponse("/login", status_code=302)
+    response = RedirectResponse("/welcome", status_code=302)
     response.delete_cookie("auth_token")
     return response
 
@@ -188,6 +264,18 @@ def load_folder_db():
 def save_folder_db(db):
     with open(FOLDER_DB, 'w') as f:
         json.dump(db, f, indent=2)
+
+def load_config():
+    try:
+        with open(CONFIG_DB, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def save_config(config):
+    with open(CONFIG_DB, 'w') as f:
+        json.dump(config, f, indent=2)
+
 
 def build_folder_hierarchy():
     """Build hierarchical folder structure from videos and folders"""
@@ -570,7 +658,102 @@ async def rename_folder(old_name: str = Form(...), new_name: str = Form(...), au
 
 
 @app.get("/api/telegram/channels")
-async def get_telegram_channels():
+async def get_telegram_channels(auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+        user = users[username]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    channels = user.get('telegram_channels', [])
+    return {"channels": channels}
+
+@app.post("/api/telegram/add_channel")
+async def add_telegram_channel(channel: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+        user = users[username]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    channels = user.get('telegram_channels', [])
+    if channel not in channels:
+        channels.append(channel)
+        user['telegram_channels'] = channels
+        save_users(users)
+    return {"message": "Channel added"}
+
+@app.post("/api/telegram/remove_channel")
+async def remove_telegram_channel(channel: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+        user = users[username]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    channels = user.get('telegram_channels', [])
+    if channel in channels:
+        channels.remove(channel)
+        user['telegram_channels'] = channels
+        save_users(users)
+    return {"message": "Channel removed"}
+
+@app.post("/api/telegram/sync_all")
+async def sync_all_telegram_channels(background_tasks: BackgroundTasks, auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+        user = users[username]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    channels = user.get('telegram_channels', [])
+    for channel in channels:
+        background_tasks.add_task(fetch_and_store_telegram_videos, channel, username)
+    return {"message": f"Syncing {len(channels)} channels"}
+
+@app.get("/api/settings")
+async def get_settings():
+    config = load_config()
+    return {
+        "api_id": config.get('telegram_api_id', ''),
+        "api_hash": config.get('telegram_api_hash', '')
+    }
+
+@app.post("/api/settings")
+async def save_settings(api_id: str = Form(...), api_hash: str = Form(...)):
+    config = load_config()
+    config['telegram_api_id'] = api_id
+    config['telegram_api_hash'] = api_hash
+    save_config(config)
+    return {"message": "Settings saved"}
     """Get list of configured Telegram channels"""
     if not TELEGRAM_AVAILABLE:
         return {"error": "Telegram client not available", "channels": []}
@@ -580,17 +763,26 @@ async def get_telegram_channels():
     return {"channels": channels}
 
 @app.get("/api/telegram/sync/{channel}")
-async def sync_telegram_channel(channel: str, background_tasks: BackgroundTasks):
+async def sync_telegram_channel(channel: str, background_tasks: BackgroundTasks, auth_token: str = Cookie(None)):
     """Sync videos from a Telegram channel"""
     import traceback
     if not TELEGRAM_AVAILABLE:
         print("[ERROR] Telegram client not available")
         raise HTTPException(status_code=400, detail="Telegram client not available")
+    # Authenticate user
     try:
-        # Queue background task
-        print(f"[INFO] Starting sync for channel: {channel}")
-        background_tasks.add_task(fetch_and_store_telegram_videos, channel)
-        return {"message": f"Syncing channel: {channel}"}
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+    try:
+        # Queue background task with username
+        print(f"[INFO] Starting sync for channel: {channel} (user: {username})")
+        background_tasks.add_task(fetch_and_store_telegram_videos, channel, username)
+        return {"message": f"Syncing channel: {channel} for user: {username}"}
     except Exception as e:
         print(f"[ERROR] Exception in sync_telegram_channel: {e}")
         print(traceback.format_exc())
@@ -609,26 +801,39 @@ async def get_telegram_videos():
         pass
     return {}
 
-async def fetch_and_store_telegram_videos(channel: str):
-    """Background task to fetch and store Telegram videos"""
+async def fetch_and_store_telegram_videos(channel: str, username: str):
+    """Background task to fetch and store Telegram videos for a user"""
     import traceback
     if not TELEGRAM_AVAILABLE:
         print("[ERROR] Telegram client not available in fetch_and_store_telegram_videos")
         return
     try:
-        print(f"[INFO] Fetching videos from channel: {channel}")
+        print(f"[INFO] Fetching videos from channel: {channel} for user: {username}")
         videos = await fetch_videos_from_channel(channel)
         db = load_db()
+        folder_db = load_folder_db()
+        folder_name = f"📱 {channel}"
+        # Ensure folder exists in folder_db for this user
+        if folder_name not in folder_db:
+            folder_db[folder_name] = {
+                'name': folder_name,
+                'path': folder_name,
+                'parent_path': '',
+                'user_id': username,
+                'created_time': datetime.now().isoformat()
+            }
+            save_folder_db(folder_db)
         for video in videos:
             unique_id = video.get('unique_video_id')
             if unique_id and unique_id not in db:
-                # Use file_id for streaming
                 file_id = video.get('file_id') or video.get('stream_url') or ''
                 db[unique_id] = {
                     'video_id': unique_id,
+                    'user_id': username,
                     'title': video.get('title', 'Telegram Video'),
                     'source_url': f"/api/telegram/stream/{file_id}",
-                    'folder_name': f"📱 {video.get('channel_name', 'Telegram')}",
+                    'folder_name': folder_name,
+                    'folder_path': folder_name,
                     'embed_url': f"/watch/{unique_id}",
                     'thumbnail_path': video.get('thumbnail_path', ''),
                     'duration': video.get('duration', 0),
@@ -641,7 +846,7 @@ async def fetch_and_store_telegram_videos(channel: str):
                     'channel_id': video.get('channel_id')
                 }
         save_db(db)
-        print(f"[INFO] Synced {len(videos)} videos from {channel}")
+        print(f"[INFO] Synced {len(videos)} videos from {channel} for user: {username}")
     except Exception as e:
         print(f"[ERROR] Exception in fetch_and_store_telegram_videos: {e}")
         print(traceback.format_exc())
@@ -1184,6 +1389,33 @@ async def copy_video(video_id: str = Form(...), new_folder_path: str = Form(...)
     save_db(db)
 
     return {"message": f"Video copied to '{new_folder_path}'", "new_video_id": new_video_id}
+
+@app.post("/api/rename_video")
+async def rename_video(video_id: str = Form(...), new_title: str = Form(...), auth_token: str = Cookie(None)):
+    """Rename a video title"""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    db = load_db()
+    if video_id not in db:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    video = db[video_id]
+    if video.get('user_id') != username:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    video['title'] = new_title
+    save_db(db)
+    return {"message": "Video renamed successfully"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
