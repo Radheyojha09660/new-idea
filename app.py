@@ -1,3 +1,66 @@
+from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks, File, UploadFile, Response, Cookie
+from fastapi.responses import StreamingResponse
+from starlette.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import uvicorn
+import yt_dlp
+import json
+import os
+from datetime import datetime
+import aiofiles
+import shutil
+from auth import get_current_user, authenticate_user, register_user
+import asyncio
+try:
+    from telegram_client import fetch_videos_from_channel
+    from telegram_client import get_client
+    TELEGRAM_AVAILABLE = True
+except ImportError:
+    TELEGRAM_AVAILABLE = False
+import tempfile
+
+app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Only mount videos directory if it exists
+if os.path.exists("videos"):
+    app.mount("/videos", StaticFiles(directory="videos"), name="videos")
+
+templates = Jinja2Templates(directory="templates")
+
+# Telegram login trigger endpoint
+@app.get("/telegram/login", response_class=HTMLResponse)
+async def telegram_login(request: Request):
+    if not TELEGRAM_AVAILABLE:
+        raise HTTPException(status_code=400, detail="Telegram client not available")
+    client = None
+    try:
+        # Start client; on first run will prompt for OTP/2FA in server console
+        client = await get_client()
+        # Verify login by fetching self
+        try:
+            _ = await client.get_me()
+        except Exception:
+            # Even if get_me fails, session may be created; continue
+            pass
+        # Stop client; session remains persisted for future use
+        try:
+            await client.stop()
+        except Exception:
+            pass
+        # Redirect to home (or login if not authenticated in site)
+        return RedirectResponse("/", status_code=302)
+    except Exception as e:
+        # Ensure client stopped on error
+        try:
+            if client:
+                await client.stop()
+        except Exception:
+            pass
+        return templates.TemplateResponse("login.html", {"request": request, "error": f"Telegram login failed: {e}"})
+
 # --- SYNC ALL USER TELEGRAM CHANNELS ENDPOINT ---
 @app.post("/api/telegram/sync_all")
 async def sync_all_user_telegram_channels(background_tasks: BackgroundTasks, auth_token: str = Cookie(None)):
@@ -19,8 +82,6 @@ async def sync_all_user_telegram_channels(background_tasks: BackgroundTasks, aut
         background_tasks.add_task(fetch_and_store_telegram_videos, channel, username)
     return {"message": f"Syncing {len(channels)} channel(s): {', '.join(channels)}"}
 # --- USER TELEGRAM CHANNEL MANAGEMENT ENDPOINTS ---
-from fastapi import status
-
 @app.get("/api/user/telegram_channels")
 async def get_user_telegram_channels(auth_token: str = Cookie(None)):
     """Get the logged-in user's Telegram channel list"""
@@ -71,37 +132,6 @@ async def remove_user_telegram_channel(channel: str = Form(...), auth_token: str
         users[username] = user
         save_users(users)
     return {"telegram_channels": channels}
-from fastapi import FastAPI, Request, HTTPException, Form, BackgroundTasks, File, UploadFile, Response, Cookie
-from fastapi.responses import StreamingResponse
-from starlette.responses import RedirectResponse
-from fastapi.responses import HTMLResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-import uvicorn
-import yt_dlp
-import json
-import os
-from datetime import datetime
-import aiofiles
-import shutil
-from auth import get_current_user, authenticate_user, register_user
-import asyncio
-try:
-    from telegram_client import fetch_videos_from_channel
-    from telegram_client import get_client
-    TELEGRAM_AVAILABLE = True
-except ImportError:
-    TELEGRAM_AVAILABLE = False
-import tempfile
-
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Only mount videos directory if it exists
-if os.path.exists("videos"):
-    app.mount("/videos", StaticFiles(directory="videos"), name="videos")
-
-templates = Jinja2Templates(directory="templates")
 
 # Fallback: Show Telegram videos from cache if sync fails
 @app.get("/telegram-videos", response_class=HTMLResponse)
@@ -167,14 +197,19 @@ async def stream_telegram_video(file_id: str):
         def iterfile():
             with open(temp_path, mode="rb") as file_like:
                 yield from file_like
+            # Remove after streaming
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
         return StreamingResponse(iterfile(), media_type="video/mp4")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Streaming failed: {e}")
-    finally:
+        # Clean up on error
         try:
             os.remove(temp_path)
         except Exception:
             pass
+        raise HTTPException(status_code=500, detail=f"Streaming failed: {e}")
 
 VIDEO_DB = "video_db.json"
 FOLDER_DB = "folder_db.json"
@@ -488,6 +523,73 @@ async def add_video(
     background_tasks.add_task(process_video, url, actual_folder, username)
     return {"message": "Video processing started"}
 
+@app.post("/upload_video")
+async def upload_video(
+    file: UploadFile = File(...),
+    folder_path: str = Form(None),
+    new_folder: str = Form(None),
+    auth_token: str = Cookie(None)
+):
+    # Verify user authentication
+    if not auth_token:
+        return {"error": "Authentication required"}, 401
+
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            return {"error": "User not found"}, 401
+        user = users[username]
+    except Exception:
+        return {"error": "Invalid authentication"}, 401
+
+    # Use new_folder if provided, otherwise use folder_path
+    actual_folder = new_folder if new_folder else folder_path
+    if not actual_folder:
+        return {"error": "Folder path is required"}, 400
+
+    # Save the uploaded file
+    user_video_dir = os.path.join("videos", username)
+    os.makedirs(user_video_dir, exist_ok=True)
+    file_path = os.path.join(user_video_dir, file.filename)
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+
+    # Add to database
+    db = load_db()
+    folder_db = load_folder_db()
+    folder_name = actual_folder
+    # Ensure folder exists
+    if folder_name not in folder_db:
+        folder_db[folder_name] = {
+            'name': folder_name,
+            'path': folder_name,
+            'parent_path': '',
+            'user_id': username,
+            'created_time': datetime.now().isoformat()
+        }
+        save_folder_db(folder_db)
+
+    unique_id = f"upload_{username}_{int(datetime.now().timestamp())}"
+    db[unique_id] = {
+        'video_id': unique_id,
+        'user_id': username,
+        'title': file.filename,
+        'source_url': f"/videos/{username}/{file.filename}",
+        'folder_name': folder_name,
+        'folder_path': folder_name,
+        'embed_url': f"/watch/{unique_id}",
+        'thumbnail_path': '',  # No thumbnail for uploaded
+        'duration': 0,  # Could extract later
+        'file_size': 0,  # Could get from file
+        'added_time': datetime.now().isoformat(),
+        'views_count': 0,
+        'source_type': 'upload'
+    }
+    save_db(db)
+    return {"message": "Video uploaded successfully"}
+
 @app.get("/api/folders")
 async def get_folders(auth_token: str = Cookie(None)):
     # Check authentication
@@ -551,7 +653,16 @@ async def get_stream(video_id: str, auth_token: str = Cookie(None)):
     try:
         # Extract stream URL using yt-dlp
         url = video['source_url']
-        
+
+        # If it's already a Telegram stream URL, return it directly
+        if url.startswith('/api/telegram/stream/'):
+            return {
+                "stream_url": url,
+                "title": video.get('title'),
+                "duration": video.get('duration', 0),
+                "format": "mp4"
+            }
+
         # Try to get direct MP4/WebM URL
         ydl_opts = {
             'format': '18',  # 18 is MP4 format on YouTube
@@ -597,7 +708,7 @@ async def get_stream(video_id: str, auth_token: str = Cookie(None)):
         # If we still don't have URL, use fallback embed
         return {
             "stream_url": None,
-            "fallback_embed": f"https://www.youtube.com/embed/{video_id}?autoplay=1&controls=1&rel=0",
+            "fallback_embed": f"https://www.youtube.com/embed/{video_id}?autoplay=0&controls=1&rel=0",
             "error": "Could not extract direct stream",
             "title": video.get('title')
         }

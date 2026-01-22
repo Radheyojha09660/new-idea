@@ -6,36 +6,57 @@ import config
 import json
 from datetime import datetime
 
+client_lock = asyncio.Lock()
+client_instance = None
+
 async def get_client():
-    if config.BOT_TOKEN:
-        # Use bot client
-        client = Client(
-            "bot_session",
-            api_id=config.API_ID,
-            api_hash=config.API_HASH,
-            bot_token=config.BOT_TOKEN
-        )
-    else:
-        # Use user client
-        client = Client(
-            config.SESSION_FILE,
-            api_id=config.API_ID,
-            api_hash=config.API_HASH
-        )
-    await client.start()
-    return client
+    global client_instance
+    if client_instance is None:
+        async with client_lock:
+            if client_instance is None:
+                if config.BOT_TOKEN:
+                    # Use bot client
+                    client_instance = Client(
+                        "bot_session",
+                        api_id=config.API_ID,
+                        api_hash=config.API_HASH,
+                        bot_token=config.BOT_TOKEN,
+                        no_updates=True
+                    )
+                else:
+                    # Use user client
+                    client_instance = Client(
+                        config.SESSION_FILE,
+                        api_id=config.API_ID,
+                        api_hash=config.API_HASH,
+                        no_updates=True
+                    )
+                await client_instance.start()
+    return client_instance
 
 async def fetch_videos_from_channel(channel_id):
     client = await get_client()
     videos = []
+    message_count = 0
     try:
         chat = await client.get_chat(channel_id)
         channel_name = chat.title
-        async for message in client.get_chat_history(channel_id):
+        print(f"Fetching from channel: {channel_name} ({channel_id})")
+        # Try to join if not member
+        try:
+            await client.join_chat(channel_id)
+            print(f"Joined channel: {channel_name}")
+        except Exception:
+            print(f"Already member or cannot join: {channel_name}")
+        async for message in client.get_chat_history(channel_id, limit=100):  # Limit to 100 messages
+            message_count += 1
             if message.video:
                 video = message.video
                 unique_id = f"{channel_id}_{message.id}"
-                thumbnail_path = await download_thumbnail_if_needed(client, video.thumbnail, unique_id)
+                try:
+                    thumbnail_path = await download_thumbnail_if_needed(client, getattr(video, 'thumbnail', None), unique_id)
+                except Exception:
+                    thumbnail_path = None
                 data = {
                     'unique_video_id': unique_id,
                     'message_id': message.id,
@@ -55,10 +76,10 @@ async def fetch_videos_from_channel(channel_id):
                     'last_updated': message.date.timestamp()
                 }
                 videos.append(data)
+        print(f"Checked {message_count} messages, found {len(videos)} videos")
     except Exception as e:
         print(f"Error fetching from {channel_id}: {e}")
-    finally:
-        await client.stop()
+    # Don't stop global client
     return videos
 
 async def download_thumbnail_if_needed(client, thumbnail, unique_id):

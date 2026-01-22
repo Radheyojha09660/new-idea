@@ -262,6 +262,9 @@ i <!DOCTYPE html>
             <a href="/welcome" class="btn-icon" title="Homepage">
                 <i class="fas fa-home"></i>
             </a>
+            <button class="btn-icon" title="Connect Telegram" onclick="window.location.href='/telegram/login'" style="background: rgba(0,136,204,0.2); color: #0088cc;">
+                <i class="fab fa-telegram"></i>
+            </button>
             <div class="dropdown">
                 <button class="btn-icon dropbtn" title="Add">
                     <i class="fas fa-plus"></i>
@@ -352,11 +355,15 @@ i <!DOCTYPE html>
             <!-- Add Video Section -->
             <section class="add-video-section">
                 <h2><i class="fas fa-cloud-upload-alt"></i> Add New Video</h2>
-                <form id="addVideoForm" onsubmit="submitAddVideo(event)">
+                <form id="addVideoForm" enctype="multipart/form-data" onsubmit="submitAddVideo(event)">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                         <div class="form-group">
-                            <label for="videoUrl">YouTube URL <span style="color: var(--primary-color);">*</span></label>
-                            <input type="url" id="videoUrl" name="url" placeholder="https://www.youtube.com/watch?v=..." required>
+                            <label for="videoUrl">YouTube URL</label>
+                            <input type="url" id="videoUrl" name="url" placeholder="https://www.youtube.com/watch?v=...">
+                        </div>
+                        <div class="form-group">
+                            <label for="videoFile">Or Upload Video File <span style="color: var(--primary-color);">*</span></label>
+                            <input type="file" id="videoFile" name="file" accept="video/*">
                         </div>
                         <div class="form-group">
                             <label for="folderSelect">Select Folder (Optional)</label>
@@ -423,7 +430,7 @@ i <!DOCTYPE html>
                                 </button>
                                 <a href="/watch/{{ video.video_id }}" class="video-link">
                                     <div class="video-thumbnail">
-                                        <img src="{% if 'thumbnails' in video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}https://img.youtube.com/vi/{{ video.video_id }}/hqdefault.jpg{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
+                                        <img src="{% if video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}{% if video.source_type == 'telegram' %}https://via.placeholder.com/300x180?text=Telegram+Video{% else %}https://img.youtube.com/vi/{{ video.video_id }}/hqdefault.jpg{% endif %}{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
                                     </div>
                                     <div class="video-info">
                                         <div class="video-title">{{ video.title }}</div>
