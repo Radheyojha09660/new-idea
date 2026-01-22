@@ -187,7 +187,7 @@
             <!-- Video Player -->
             <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; margin-bottom: 2rem; aspect-ratio: 16/9;">
                 <div id="player" style="width: 100%; height: 100%; display: none;"></div>
-                <video id="html5Player" controls preload="metadata" style="width: 100%; height: 100%; display: none;" poster="{% if video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}{% if video.source_type == 'telegram' %}https://via.placeholder.com/1280x720?text=Telegram+Video{% else %}https://img.youtube.com/vi/{{ video.video_id }}/maxresdefault.jpg{% endif %}{% endif %}">
+                <video id="html5Player" controls preload="metadata" style="width: 100%; height: 100%; display: none;" poster="{% if video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}{% if video.source_type == 'telegram' %}https://via.placeholder.com/1280x720?text=Telegram+Video{% elif 'youtube.com' in video.source_url or 'youtu.be' in video.source_url %}{% set yt_id = video.source_url.split('v=')[1].split('&')[0] if 'v=' in video.source_url else video.source_url.split('/')[-1] %}https://img.youtube.com/vi/{{ yt_id }}/maxresdefault.jpg{% else %}https://via.placeholder.com/1280x720?text=Video{% endif %}{% endif %}">
                     <source id="videoSource" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>

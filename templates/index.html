@@ -430,7 +430,7 @@ i <!DOCTYPE html>
                                 </button>
                                 <a href="/watch/{{ video.video_id }}" class="video-link">
                                     <div class="video-thumbnail">
-                                        <img src="{% if video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}{% if video.source_type == 'telegram' %}https://via.placeholder.com/300x180?text=Telegram+Video{% else %}https://img.youtube.com/vi/{{ video.video_id }}/hqdefault.jpg{% endif %}{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
+                                        <img src="{% if video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}{% if video.source_type == 'telegram' %}https://via.placeholder.com/300x180?text=Telegram+Video{% elif 'youtube.com' in video.source_url or 'youtu.be' in video.source_url %}{% set yt_id = video.source_url.split('v=')[1].split('&')[0] if 'v=' in video.source_url else video.source_url.split('/')[-1] %}https://img.youtube.com/vi/{{ yt_id }}/hqdefault.jpg{% else %}https://via.placeholder.com/300x180?text=Video{% endif %}{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
                                     </div>
                                     <div class="video-info">
                                         <div class="video-title">{{ video.title }}</div>
