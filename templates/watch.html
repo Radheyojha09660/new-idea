@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
+    <!-- hls.js for adaptive streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         .watch-container {
             margin-left: 260px;
@@ -365,8 +367,33 @@
                 const response = await fetch(`/api/stream/${videoId}`);
                 const data = await response.json();
 
+                if (data.hls_url) {
+                    console.log('✅ HLS stream available!');
+                    if (Hls.isSupported()) {
+                        const hls = new Hls({ maxBufferLength: 30 });
+                        hls.loadSource(data.hls_url);
+                        hls.attachMedia(html5Player);
+                        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                            html5Player.play().catch(()=>{});
+                        });
+                        html5Player.style.display = 'block';
+                        loadingSpinner.style.display = 'none';
+                        document.getElementById('player').style.display = 'none';
+                        usingHtml5 = true;
+                        return true;
+                    } else if (html5Player.canPlayType('application/vnd.apple.mpegurl')) {
+                        html5Player.src = data.hls_url;
+                        html5Player.addEventListener('loadedmetadata', () => html5Player.play().catch(()=>{}));
+                        html5Player.style.display = 'block';
+                        loadingSpinner.style.display = 'none';
+                        document.getElementById('player').style.display = 'none';
+                        usingHtml5 = true;
+                        return true;
+                    }
+                }
+
                 if (data.stream_url) {
-                    console.log('✅ Direct stream available!');
+                    console.log('✅ Direct MP4/WebM stream available!');
                     document.getElementById('videoSource').src = data.stream_url;
                     html5Player.load();
                     html5Player.style.display = 'block';

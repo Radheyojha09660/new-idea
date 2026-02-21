@@ -20,6 +20,7 @@ try:
 except ImportError:
     TELEGRAM_AVAILABLE = False
 import tempfile
+import subprocess
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -316,6 +317,34 @@ def save_config(config):
     with open(CONFIG_DB, 'w') as f:
         json.dump(config, f, indent=2)
 
+# --- MEDIA PACKAGING HELPERS (HLS) ---
+
+def ffmpeg_available():
+    try:
+        subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        return True
+    except Exception:
+        return False
+
+def package_hls(input_path: str, output_dir: str) -> bool:
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        # Basic VOD HLS with segment duration 6s
+        cmd = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-c:v", "copy", "-c:a", "copy",
+            "-start_number", "0",
+            "-hls_time", "6",
+            "-hls_playlist_type", "vod",
+            "-hls_flags", "independent_segments",
+            os.path.join(output_dir, "master.m3u8")
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return res.returncode == 0 and os.path.exists(os.path.join(output_dir, "master.m3u8"))
+    except Exception as e:
+        print(f"HLS packaging failed: {e}")
+        return False
+
 
 # --- NEW JSON STORE HELPERS ---
 
@@ -607,6 +636,17 @@ async def upload_video(
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
+    # Try to package HLS for uploaded video
+    hls_master_url = None
+    if ffmpeg_available():
+        try:
+            unique_id = f"upload_{username}_{int(datetime.now().timestamp())}"
+            hls_dir = os.path.join("videos", username, "hls", unique_id)
+            if package_hls(file_path, hls_dir):
+                hls_master_url = f"/{hls_dir}/master.m3u8".replace("\\", "/")
+        except Exception as e:
+            print(f"HLS packaging failed for upload: {e}")
+
     # Add to database
     db = load_db()
     folder_db = load_folder_db()
@@ -622,7 +662,7 @@ async def upload_video(
         }
         save_folder_db(folder_db)
 
-    unique_id = f"upload_{username}_{int(datetime.now().timestamp())}"
+    unique_id = unique_id if 'unique_id' in locals() else f"upload_{username}_{int(datetime.now().timestamp())}"
     db[unique_id] = {
         'video_id': unique_id,
         'user_id': username,
@@ -636,7 +676,8 @@ async def upload_video(
         'file_size': 0,  # Could get from file
         'added_time': datetime.now().isoformat(),
         'views_count': 0,
-        'source_type': 'upload'
+        'source_type': 'upload',
+        'hls_master_url': hls_master_url
     }
     save_db(db)
     return {"message": "Video uploaded successfully"}
@@ -701,6 +742,16 @@ async def get_stream(video_id: str, auth_token: str = Cookie(None)):
     if video.get('user_id') != username:
         raise HTTPException(status_code=403, detail="Access denied")
     
+    # If HLS is available (for uploaded or downloaded local videos), prefer it
+    hls_url = video.get('hls_master_url')
+    if hls_url:
+        return {
+            "hls_url": hls_url,
+            "title": video.get('title'),
+            "duration": video.get('duration', 0),
+            "format": "hls"
+        }
+
     try:
         # Extract stream URL using yt-dlp
         url = video['source_url']
@@ -1117,6 +1168,17 @@ async def process_video(url: str, folder_name: str, username: str = None):
             print(f"Failed to download video {video_id}: {e}")
             # Fallback to embed
             video_path = None
+        
+        # If downloaded, try to package HLS
+        hls_master_url = None
+        if video_path and os.path.exists(video_path) and ffmpeg_available():
+            try:
+                hls_dir = os.path.join("videos", username, folder_name, video_id, "hls") if username else os.path.join("videos", folder_name, video_id, "hls")
+                ok = package_hls(video_path, hls_dir)
+                if ok:
+                    hls_master_url = f"/{hls_dir}/master.m3u8".replace("\\", "/")
+            except Exception as e:
+                print(f"HLS packaging error for {video_id}: {e}")
 
         # Download thumbnail
         thumbnail_path = os.path.join("static", "thumbnails", f"{video_id}.jpg")
@@ -1150,7 +1212,8 @@ async def process_video(url: str, folder_name: str, username: str = None):
             'file_size': os.path.getsize(video_path) if video_path and os.path.exists(video_path) else 0,
             'added_time': datetime.now().isoformat(),
             'views_count': 0,
-            'source_type': 'youtube_download' if video_path else 'youtube'
+            'source_type': 'youtube_download' if video_path else 'youtube',
+            'hls_master_url': hls_master_url
         }
         save_db(db)
         print(f"Video added: {title}")
