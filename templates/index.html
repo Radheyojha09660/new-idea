@@ -1,10 +1,11 @@
-i <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VideoHub - YouTube Style Video Library</title>
     <link rel="stylesheet" href="/static/css/youtube.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google AdSense -->
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
@@ -199,6 +200,12 @@ i <!DOCTYPE html>
                 const sortSelect = document.getElementById('sortSelect');
                 const grid = document.getElementById('allVideosGrid');
                 if (!grid) return;
+                // Lazy loading + reveal effect for thumbnails
+                grid.querySelectorAll('.video-thumbnail img').forEach(img => {
+                    img.setAttribute('loading', 'lazy');
+                    img.setAttribute('data-loaded', 'false');
+                    img.addEventListener('load', () => img.setAttribute('data-loaded', 'true'));
+                });
                 function filterVideos() {
                     const query = searchInput.value.toLowerCase();
                     const cards = grid.querySelectorAll('.video-card');
@@ -244,6 +251,13 @@ i <!DOCTYPE html>
             </script>
         </div>
         <div class="header-actions">
+            <button class="btn-icon" id="kbdHelpBtn" title="Keyboard Shortcuts">
+                <i class="fas fa-keyboard"></i>
+            </button>
+            <div class="theme-toggle" id="themeToggle" title="Toggle theme">
+                <i class="fas fa-sun sun"></i>
+                <i class="fas fa-moon moon"></i>
+            </div>
             {% if current_user %}
             {% if current_user.role == "admin" %}
             <span class="admin-badge" style="background: linear-gradient(45deg, #ff6b6b, #ee5a24); color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-right: 1rem;">
@@ -430,6 +444,27 @@ i <!DOCTYPE html>
                 <div id="playlistsList" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem;"></div>
             </section>
 
+            <section class="rail" id="continueWatchingRail">
+                <h2 class="rail-title"><i class="fas fa-clock"></i> Continue Watching</h2>
+                <div class="rail-grid" id="continueWatchingGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <section class="rail" id="trendingRail">
+                <h2 class="rail-title"><i class="fas fa-fire"></i> Trending</h2>
+                <div class="rail-grid" id="trendingGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <section class="rail" id="recentRail">
+                <h2 class="rail-title"><i class="fas fa-bolt"></i> Recently Added</h2>
+                <div class="rail-grid" id="recentGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
             <section>
                 <h2 class="section-title">
                     <i class="fas fa-video"></i> Latest Videos
@@ -437,7 +472,7 @@ i <!DOCTYPE html>
                 <div class="videos-grid" id="allVideosGrid">
                     {% if videos %}
                         {% for video in videos %}
-                            <div class="video-card" data-video-id="{{ video.video_id }}">
+                            <div class="video-card fade-in-up" data-video-id="{{ video.video_id }}">
                                 <button class="video-menu-btn" onclick="openVideoMenu(event, '{{ video.video_id }}')">
                                     <i class="fas fa-ellipsis-v"></i>
                                 </button>
@@ -1071,11 +1106,15 @@ i <!DOCTYPE html>
         function showToast(message, type = 'info', duration = 3500) {
             const toast = document.getElementById('toast');
             toast.textContent = message;
-            toast.style.display = 'block';
             toast.style.background = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#0088cc';
             toast.style.color = 'white';
             toast.style.border = type === 'error' ? '2px solid #b71c1c' : 'none';
-            setTimeout(() => { toast.style.display = 'none'; }, duration);
+            toast.style.display = 'block';
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => { toast.style.display = 'none'; }, 300);
+            }, duration);
         }
 
         function logout() {
@@ -1177,6 +1216,54 @@ i <!DOCTYPE html>
 
         // Example usage: showToast('Welcome!', 'success');
         // Replace alert() with showToast() in your JS for better UX.
+
+        // Theme toggle + persistence
+        (function(){
+            const toggle = document.getElementById('themeToggle');
+            const key = 'videohub_theme';
+            const apply = (mode) => {
+                if (mode === 'light') document.body.classList.add('light');
+                else document.body.classList.remove('light');
+            };
+            let mode = localStorage.getItem(key) || 'dark';
+            apply(mode);
+            toggle?.addEventListener('click', () => {
+                mode = (mode === 'dark') ? 'light' : 'dark';
+                localStorage.setItem(key, mode);
+                apply(mode);
+            });
+        })();
+
+        // Keyboard shortcuts overlay
+        (function(){
+            const btn = document.getElementById('kbdHelpBtn');
+            const ov = document.getElementById('kbdOverlay');
+            btn?.addEventListener('click', () => { ov.style.display = 'block'; });
+            ov?.addEventListener('click', (e) => { if (e.target === ov) ov.style.display = 'none'; });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && ov?.style.display === 'block') ov.style.display = 'none';
+                if ((e.key === '?' && !e.shiftKey) || (e.shiftKey && e.key === '/')) {
+                    e.preventDefault(); ov.style.display = 'block';
+                }
+            });
+        })();
     </script>
+<!-- Keyboard Shortcuts Overlay -->
+<div id="kbdOverlay">
+  <div class="panel">
+    <h3><i class="fas fa-keyboard"></i> Keyboard Shortcuts</h3>
+    <div class="kbd-grid">
+      <div class="kbd"><strong>Space / K</strong><br>Play/Pause</div>
+      <div class="kbd"><strong>J / L</strong><br>Seek -10s / +10s</div>
+      <div class="kbd"><strong>M</strong><br>Mute/Unmute</div>
+      <div class="kbd"><strong>F</strong><br>Fullscreen</div>
+      <div class="kbd"><strong>Shift + <</strong><br>Slower</div>
+      <div class="kbd"><strong>Shift + ></strong><br>Faster</div>
+      <div class="kbd"><strong>?</strong><br>Show this help</div>
+      <div class="kbd"><strong>Esc</strong><br>Close overlay</div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
