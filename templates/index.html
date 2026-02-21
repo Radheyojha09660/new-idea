@@ -417,6 +417,19 @@ i <!DOCTYPE html>
                 <div id="channelsList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
             </section>
 
+            <!-- YouTube Playlist Management -->
+            <section style="background: linear-gradient(135deg, rgba(255, 0, 0, 0.1), rgba(255, 0, 0, 0.05)); border: 1px solid rgba(255, 0, 0, 0.3); border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem;">
+                <h3><i class="fab fa-youtube" style="color: #ff0000;"></i> YouTube Playlist Sync</h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 1rem 0;">Add YouTube playlist link to import all videos. Videos will remain on your website even if deleted from YouTube!</p>
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                    <input type="url" id="youtubePlaylistUrl" placeholder="https://www.youtube.com/playlist?list=..." style="flex: 1; padding: 0.75rem; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                    <button onclick="addYoutubePlaylist()" style="background: #ff0000; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">
+                        <i class="fas fa-plus"></i> Add Playlist
+                    </button>
+                </div>
+                <div id="playlistsList" style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem;"></div>
+            </section>
+
             <section>
                 <h2 class="section-title">
                     <i class="fas fa-video"></i> Latest Videos
@@ -430,7 +443,27 @@ i <!DOCTYPE html>
                                 </button>
                                 <a href="/watch/{{ video.video_id }}" class="video-link">
                                     <div class="video-thumbnail">
-                                        <img src="{% if video.thumbnail_path %}{{ '/' + video.thumbnail_path }}{% else %}{% if video.source_type == 'telegram' %}https://via.placeholder.com/300x180?text=Telegram+Video{% elif 'youtube.com' in video.source_url or 'youtu.be' in video.source_url %}{% set yt_id = video.source_url.split('v=')[1].split('&')[0] if 'v=' in video.source_url else video.source_url.split('/')[-1] %}https://img.youtube.com/vi/{{ yt_id }}/hqdefault.jpg{% else %}https://via.placeholder.com/300x180?text=Video{% endif %}{% endif %}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
+                                        {% set yt_id = '' %}
+                                        {% if video.thumbnail_path and video.thumbnail_path != '' %}
+                                            <img src="/{{ video.thumbnail_path }}" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
+                                        {% elif video.source_type == 'telegram' %}
+                                            <img src="https://via.placeholder.com/300x180?text=Telegram+Video" alt="{{ video.title }}">
+                                        {% elif 'youtube.com' in video.source_url or 'youtu.be' in video.source_url %}
+                                            {% if 'v=' in video.source_url %}
+                                                {% set yt_id = video.source_url.split('v=')[1].split('&')[0] if 'v=' in video.source_url else video.source_url.split('/')[-1] %}
+                                            {% elif 'youtu.be/' in video.source_url %}
+                                                {% set yt_id = video.source_url.split('youtu.be/')[1].split('?')[0] %}
+                                            {% elif 'embed/' in video.source_url %}
+                                                {% set yt_id = video.source_url.split('embed/')[1].split('?')[0] %}
+                                            {% endif %}
+                                            {% if yt_id %}
+                                                <img src="https://img.youtube.com/vi/{{ yt_id }}/hqdefault.jpg" alt="{{ video.title }}" onerror="this.src='https://via.placeholder.com/300x180?text=No+Image'">
+                                            {% else %}
+                                                <img src="https://via.placeholder.com/300x180?text=Video" alt="{{ video.title }}">
+                                            {% endif %}
+                                        {% else %}
+                                            <img src="https://via.placeholder.com/300x180?text=Video" alt="{{ video.title }}">
+                                        {% endif %}
                                     </div>
                                     <div class="video-info">
                                         <div class="video-title">{{ video.title }}</div>

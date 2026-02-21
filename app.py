@@ -214,6 +214,11 @@ async def stream_telegram_video(file_id: str):
 VIDEO_DB = "video_db.json"
 FOLDER_DB = "folder_db.json"
 CONFIG_DB = "config.json"
+HISTORY_DB = "history.json"
+LIKES_DB = "likes.json"
+BOOKMARKS_DB = "bookmarks.json"
+PLAYLISTS_DB = "playlists.json"
+COMMENTS_DB = "comments.json"
 
 # Authentication routes
 @app.get("/login", response_class=HTMLResponse)
@@ -310,6 +315,52 @@ def load_config():
 def save_config(config):
     with open(CONFIG_DB, 'w') as f:
         json.dump(config, f, indent=2)
+
+
+# --- NEW JSON STORE HELPERS ---
+
+def load_json_file(path, default):
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return default
+    except Exception:
+        return default
+
+def save_json_file(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+def load_history():
+    return load_json_file(HISTORY_DB, {})
+
+def save_history(data):
+    save_json_file(HISTORY_DB, data)
+
+def load_likes():
+    return load_json_file(LIKES_DB, {})
+
+def save_likes(data):
+    save_json_file(LIKES_DB, data)
+
+def load_bookmarks():
+    return load_json_file(BOOKMARKS_DB, {})
+
+def save_bookmarks(data):
+    save_json_file(BOOKMARKS_DB, data)
+
+def load_playlists():
+    return load_json_file(PLAYLISTS_DB, {})
+
+def save_playlists(data):
+    save_json_file(PLAYLISTS_DB, data)
+
+def load_comments():
+    return load_json_file(COMMENTS_DB, {})
+
+def save_comments(data):
+    save_json_file(COMMENTS_DB, data)
 
 
 def build_folder_hierarchy():
@@ -1187,7 +1238,9 @@ async def process_playlist(playlist_id: str, folder_name: str, username: str = N
                 'duration': duration,
                 'file_size': 0,
                 'added_time': datetime.now().isoformat(),
-                'views_count': 0
+                'views_count': 0,
+                'playlist_id': playlist_id,  # Track which playlist this video came from
+                'playlist_url': playlist_url  # Store playlist URL for syncing
             }
 
             added_count += 1
@@ -1198,6 +1251,77 @@ async def process_playlist(playlist_id: str, folder_name: str, username: str = N
 
     except Exception as e:
         print(f"Error processing playlist {playlist_id}: {e}")
+
+# API endpoint to sync a YouTube playlist
+@app.post("/api/youtube/sync_playlist")
+async def sync_youtube_playlist(
+    playlist_url: str = Form(...),
+    folder_name: str = Form(...),
+    background_tasks: BackgroundTasks = None,
+    auth_token: str = Cookie(None)
+):
+    """Sync a YouTube playlist - add new videos from the playlist"""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+    
+    import re
+    # Extract playlist ID from URL
+    playlist_id = None
+    playlist_patterns = [
+        r'youtube\.com/playlist\?list=([a-zA-Z0-9_-]+)',
+        r'youtube\.com/watch\?.*list=([a-zA-Z0-9_-]+)',
+    ]
+    for pattern in playlist_patterns:
+        match = re.search(pattern, playlist_url)
+        if match:
+            playlist_id = match.group(1)
+            break
+    
+    if not playlist_id:
+        raise HTTPException(status_code=400, detail="Invalid playlist URL")
+    
+    # Sync in background
+    background_tasks.add_task(process_playlist, playlist_id, folder_name, username)
+    return {"message": f"Syncing playlist {playlist_id}. New videos will be added automatically."}
+
+# Get all playlists for a user
+@app.get("/api/youtube/playlists")
+async def get_user_playlists(auth_token: str = Cookie(None)):
+    """Get all YouTube playlists that have been imported"""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+    
+    db = load_db()
+    playlists = {}
+    
+    for video in db.values():
+        if video.get('user_id') == username and video.get('playlist_id'):
+            playlist_id = video['playlist_id']
+            if playlist_id not in playlists:
+                playlists[playlist_id] = {
+                    'playlist_id': playlist_id,
+                    'playlist_url': video.get('playlist_url', f"https://www.youtube.com/playlist?list={playlist_id}"),
+                    'folder_name': video.get('folder_name'),
+                    'video_count': 0
+                }
+            playlists[playlist_id]['video_count'] += 1
+    
+    return {"playlists": list(playlists.values())}
 
 @app.post("/api/delete_folder")
 async def delete_folder(folder_name: str = Form(...), auth_token: str = Cookie(None)):
@@ -1555,6 +1679,389 @@ async def rename_video(video_id: str = Form(...), new_title: str = Form(...), au
     video['title'] = new_title
     save_db(db)
     return {"message": "Video renamed successfully"}
+
+# --- HISTORY ENDPOINTS ---
+@app.get("/api/history")
+async def get_history(video_id: str = None, auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    hist = load_history()
+    user_hist = hist.get(username, {})
+    if video_id:
+        return {"history": {video_id: user_hist.get(video_id, {})}}
+    return {"history": user_hist}
+
+@app.post("/api/history")
+async def post_history(video_id: str = Form(...), last_ts: float = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    try:
+        ts = float(last_ts)
+        if ts < 0:
+            ts = 0.0
+    except Exception:
+        ts = 0.0
+    hist = load_history()
+    user_hist = hist.get(username, {})
+    user_hist[video_id] = {"last_ts": ts, "updated_at": datetime.now().isoformat()}
+    hist[username] = user_hist
+    save_history(hist)
+    return {"message": "History updated", "video_id": video_id, "last_ts": ts}
+
+# --- LIKES ENDPOINTS ---
+@app.get("/api/likes")
+async def get_likes(video_id: str, auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    likes = load_likes()
+    entry = likes.get(video_id, {"users": []})
+    users_list = entry.get("users", [])
+    return {"count": len(users_list), "liked": username in users_list}
+
+@app.post("/api/likes")
+async def post_likes(video_id: str = Form(...), action: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    likes = load_likes()
+    entry = likes.get(video_id, {"users": []})
+    users_list = entry.get("users", [])
+    if action == "like":
+        if username not in users_list:
+            users_list.append(username)
+    elif action == "unlike":
+        if username in users_list:
+            users_list.remove(username)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    entry["users"] = users_list
+    likes[video_id] = entry
+    save_likes(likes)
+    return {"count": len(users_list), "liked": username in users_list}
+
+# --- BOOKMARKS ENDPOINTS ---
+@app.get("/api/bookmarks")
+async def get_bookmarks(auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    b = load_bookmarks()
+    vids = b.get(username, [])
+    return {"bookmarks": vids}
+
+@app.post("/api/bookmarks")
+async def post_bookmark(video_id: str = Form(...), action: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    b = load_bookmarks()
+    vids = b.get(username, [])
+    if action == "add":
+        if video_id not in vids:
+            vids.append(video_id)
+    elif action == "remove":
+        if video_id in vids:
+            vids.remove(video_id)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+    b[username] = vids
+    save_bookmarks(b)
+    return {"bookmarks": vids}
+
+# --- PLAYLISTS ENDPOINTS ---
+
+def _ensure_user_playlists(pl, username):
+    if username not in pl:
+        pl[username] = {"next_id": 1, "playlists": []}
+    return pl
+
+@app.get("/api/playlists")
+async def get_playlists(auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    pl = load_playlists()
+    data = pl.get(username, {"next_id": 1, "playlists": []})
+    return {"playlists": data.get("playlists", [])}
+
+@app.post("/api/playlists/create")
+async def create_playlist(name: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    pl = load_playlists()
+    pl = _ensure_user_playlists(pl, username)
+    uid = pl[username]["next_id"]
+    pl[username]["next_id"] = uid + 1
+    pid = f"pl_{uid}"
+    pl[username]["playlists"].append({"id": pid, "name": name, "video_ids": []})
+    save_playlists(pl)
+    return {"id": pid, "name": name, "video_ids": []}
+
+@app.post("/api/playlists/rename")
+async def rename_playlist(playlist_id: str = Form(...), name: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    pl = load_playlists()
+    data = pl.get(username, {"next_id": 1, "playlists": []})
+    for p in data.get("playlists", []):
+        if p.get("id") == playlist_id:
+            p["name"] = name
+            pl[username] = data
+            save_playlists(pl)
+            return {"message": "Renamed"}
+    raise HTTPException(status_code=404, detail="Playlist not found")
+
+@app.post("/api/playlists/delete")
+async def delete_playlist(playlist_id: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    pl = load_playlists()
+    data = pl.get(username, {"next_id": 1, "playlists": []})
+    before = len(data.get("playlists", []))
+    data["playlists"] = [p for p in data.get("playlists", []) if p.get("id") != playlist_id]
+    if len(data["playlists"]) == before:
+        raise HTTPException(status_code=404, detail="Playlist not found")
+    pl[username] = data
+    save_playlists(pl)
+    return {"message": "Deleted"}
+
+@app.post("/api/playlists/add")
+async def add_to_playlist(playlist_id: str = Form(...), video_id: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    pl = load_playlists()
+    data = pl.get(username, {"next_id": 1, "playlists": []})
+    for p in data.get("playlists", []):
+        if p.get("id") == playlist_id:
+            vids = p.get("video_ids", [])
+            if video_id not in vids:
+                vids.append(video_id)
+            p["video_ids"] = vids
+            pl[username] = data
+            save_playlists(pl)
+            return {"message": "Added"}
+    raise HTTPException(status_code=404, detail="Playlist not found")
+
+@app.post("/api/playlists/remove")
+async def remove_from_playlist(playlist_id: str = Form(...), video_id: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    pl = load_playlists()
+    data = pl.get(username, {"next_id": 1, "playlists": []})
+    for p in data.get("playlists", []):
+        if p.get("id") == playlist_id:
+            vids = p.get("video_ids", [])
+            if video_id in vids:
+                vids.remove(video_id)
+            p["video_ids"] = vids
+            pl[username] = data
+            save_playlists(pl)
+            return {"message": "Removed"}
+    raise HTTPException(status_code=404, detail="Playlist not found")
+
+# --- COMMENTS ENDPOINTS ---
+@app.get("/api/comments")
+async def get_comments(video_id: str, auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    com = load_comments()
+    return {"comments": com.get(video_id, [])}
+
+@app.post("/api/comments")
+async def post_comment(video_id: str = Form(...), text: str = Form(...), auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+        user = users[username]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="Empty comment")
+
+    com = load_comments()
+    lst = com.get(video_id, [])
+    cid = f"c_{int(datetime.now().timestamp()*1000)}"
+    display = user.get("username", username)
+    lst.append({
+        "id": cid,
+        "user_id": username,
+        "name": display,
+        "text": text.strip(),
+        "ts": datetime.now().isoformat()
+    })
+    com[video_id] = lst
+    save_comments(com)
+    return {"message": "Comment added", "id": cid}
+
+# --- SEARCH ENDPOINT ---
+@app.get("/api/search")
+async def search_videos(q: str = "", sort: str = "recent", folder: str = None, duration: str = None, auth_token: str = Cookie(None)):
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        from auth import verify_token, load_users
+        username = verify_token(auth_token)
+        users = load_users()
+        if username not in users:
+            raise HTTPException(status_code=401, detail="User not found")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication")
+
+    db = load_db()
+    vids = [v for v in db.values() if v.get('user_id') == username]
+
+    # Filters
+    q_lower = (q or "").strip().lower()
+    if q_lower:
+        vids = [v for v in vids if q_lower in (v.get('title', '') or '').lower() or q_lower in (v.get('folder_path', '') or '').lower()]
+    if folder:
+        vids = [v for v in vids if v.get('folder_path') == folder or (v.get('folder_path', '').startswith(folder + '/'))]
+    if duration in ("short", "medium", "long"):
+        def bucket_ok(d):
+            try:
+                d = int(d)
+            except Exception:
+                d = 0
+            if duration == "short":
+                return d < 4*60
+            if duration == "medium":
+                return 4*60 <= d < 20*60
+            return d >= 20*60
+        vids = [v for v in vids if bucket_ok(v.get('duration', 0))]
+
+    # Sort
+    def parse_dt(s):
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            return datetime.min
+    if sort == "views":
+        vids.sort(key=lambda x: x.get('views_count', 0), reverse=True)
+    elif sort == "title":
+        vids.sort(key=lambda x: (x.get('title') or '').lower())
+    else:  # recent
+        vids.sort(key=lambda x: parse_dt(x.get('added_time', '')), reverse=True)
+
+    return {"results": vids}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
