@@ -562,6 +562,7 @@ i <!DOCTYPE html>
         document.addEventListener('DOMContentLoaded', function() {
             loadFolders();
             loadChannels();
+            loadPlaylists();
             setupSearch();
         });
 
@@ -708,6 +709,93 @@ i <!DOCTYPE html>
                     showToast('Syncing all channels...', 'success');
                 } else {
                     showToast('Error syncing channels: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // YouTube Playlist Functions
+        async function addYoutubePlaylist() {
+            const playlistUrl = document.getElementById('youtubePlaylistUrl').value.trim();
+            if (!playlistUrl) {
+                showToast('Please enter a YouTube playlist URL', 'error');
+                return;
+            }
+            
+            // Get folder name from the form
+            const newFolderInput = document.getElementById('newFolderInput').value.trim();
+            const folderSelect = document.getElementById('folderSelect').value;
+            let folder_name = newFolderInput || folderSelect || 'youtube';
+            
+            if (!folder_name) {
+                showToast('Please enter or select a folder name', 'error');
+                return;
+            }
+
+            try {
+                const formData = new FormData();
+                formData.append('playlist_url', playlistUrl);
+                formData.append('folder_name', folder_name);
+                
+                const response = await fetch('/api/youtube/sync_playlist', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Playlist added! Syncing videos...', 'success');
+                    document.getElementById('youtubePlaylistUrl').value = '';
+                    setTimeout(() => location.reload(), 5000);
+                } else {
+                    showToast('Error: ' + (data.detail || data.error), 'error');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function loadPlaylists() {
+            try {
+                const response = await fetch('/api/youtube/playlists');
+                const data = await response.json();
+                const playlistsList = document.getElementById('playlistsList');
+                
+                if (data.playlists && data.playlists.length > 0) {
+                    playlistsList.innerHTML = data.playlists.map(playlist => `
+                        <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fab fa-youtube" style="color: #ff0000;"></i>
+                            <span style="flex: 1;">${playlist.video_count} videos</span>
+                            <span style="font-size: 0.8rem; color: var(--text-secondary);">Folder: ${playlist.folder_name}</span>
+                            <button onclick="syncPlaylist('${playlist.playlist_url}', '${playlist.folder_name}')" style="background: #ff0000; color: white; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.8rem;">
+                                <i class="fas fa-sync"></i> Sync
+                            </button>
+                        </div>
+                    `).join('');
+                } else {
+                    playlistsList.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.9rem;">No playlists added yet.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading playlists:', error);
+            }
+        }
+
+        async function syncPlaylist(playlistUrl, folderName) {
+            try {
+                const formData = new FormData();
+                formData.append('playlist_url', playlistUrl);
+                formData.append('folder_name', folderName);
+                
+                const response = await fetch('/api/youtube/sync_playlist', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast('Syncing playlist... New videos will be added!', 'success');
+                    setTimeout(() => location.reload(), 5000);
+                } else {
+                    showToast('Error: ' + (data.detail || data.error), 'error');
                 }
             } catch (error) {
                 showToast('Error: ' + error.message, 'error');
